@@ -1,0 +1,170 @@
+#!/usr/local/bin/python
+
+# shows the imports for all files specified on the command line.  See USAGE.
+
+import string
+import getopt
+import regex
+import glob
+import sys
+import os
+
+TAB = ' ' * 4
+WIDTH = 78
+
+LEGEND = '''%s
+Legend:
+  module_name [ name, ... ]  -- module_name was imported and name(s) were used
+  module_name < name, ... >  -- name(s) were imported from module_name
+
+  files with no imports are not displayed
+
+  do "%s -h" for help
+%s
+''' % ('-' * WIDTH, os.path.basename (sys.argv[0]), '-' * WIDTH)
+
+USAGE = '''
+%s [-h] [-r] [<file or dir>]...
+
+	-h : show this help message
+	-r : recursively traverse directories
+
+	Zero or more file or directory names may be specified on the command
+	line.  If none are specified, the default is '.'
+
+	Goes through the list of files and directories, examining python files
+	to see which modules are imported and what pieces of them are used.
+	Prints results of analysis to stdout.
+
+	Note that we ignore directories named CVS and SCCS.
+''' % os.path.basename (sys.argv[0])
+
+is_py_exe = regex.compile ('^#!.*python$')
+is_import = regex.compile ('^[ \t]*import \([^#]*\)')
+is_from = regex.compile ('^[ \t]*from \([A-Za-z0-9_]+\) import \([^#]*\)')
+is_comment = regex.compile ('^[ \t]*#')
+trip_quote = regex.compile ('\(%s\|%s\)' % ("'''", '"""'))
+
+def is_python (filename, firstline):
+	return (filename[-2:] == 'py') or (is_py_exe.search (firstline) >= 0)
+
+def getFile (filename):
+	lines = []
+	try:
+		fp = open (filename, 'r')
+	except IOError:				# could not open file
+		return lines
+	line = fp.readline()
+	if is_python (filename, line):
+		quoting = []
+		while line:
+			if is_comment.match (line) < 0:
+				pos = trip_quote.search (line)
+				while pos >= 0:
+					this_quote = trip_quote.group (1)
+					if quoting:
+						if this_quote in quoting:
+							qpos = quoting.index(\
+								this_quote)
+							del quoting[qpos:]
+						else:
+							quoting.append ( \
+								this_quote)
+					else:
+						quoting.append (this_quote)
+					pos = trip_quote.search (line, pos+1)
+				if not quoting:
+					lines.append (line)
+			line = fp.readline()
+	fp.close ()
+	return lines
+
+def trim (line):
+	return string.strip (line)
+
+def processLines (lines):
+	imports = {}
+	froms = {}
+	exps = {}
+
+	for line in lines:
+		if is_import.match (line) >= 0:
+			for lib in string.split (is_import.group(1), ','):
+				lib = trim (lib)
+				imports [lib] = {}
+				exps [lib] = regex.compile ( \
+					'%s\.\([A-Za-z0-9_]+\)' % lib)
+		elif is_from.match (line) >= 0:
+			lib = is_from.group(1)
+			names = map (trim, \
+				string.split (is_from.group(2), ','))
+			if not froms.has_key (lib):
+				froms [lib] = {}
+			for name in names:
+				froms [lib][name] = 1
+
+	libs = exps.keys()
+	for line in lines:
+		for lib in libs:
+			if exps[lib].search (line) >= 0:
+				name = exps[lib].group(1)
+				imports[lib][name] = 1
+
+	s = []
+	for lib in libs:
+		s.append ('%s [ %s ]' % (lib, \
+			string.join (imports[lib].keys(), ', ')))
+	for lib in froms.keys():
+		s.append ('%s < %s >' % (lib, \
+			string.join (froms[lib].keys(), ', ')))
+	s.sort ()
+	return s
+
+def splitter (s):
+	s = TAB + s
+	if len (s) < WIDTH:
+		return [ s ]
+	else:
+		p = string.rfind (s[:WIDTH], ' ')
+		if p > WIDTH:
+			return [ s ]
+		else:
+			return [ s[:p] ] + splitter (TAB + s[p:])
+
+def processFile (filename):
+	lines = processLines (getFile (filename))
+	if len(lines) > 0:
+		print filename
+		print '-' * len(filename)
+		for line in lines:
+			for part in splitter(line):
+				print '%s' % part
+		print
+	return
+
+def processOptions ():
+	recurse = 0
+	optlist, args = getopt.getopt (sys.argv[1:], 'rh')
+	for (opt, val) in optlist:
+		if opt == '-r':
+			recurse = 1
+		elif opt == '-h':
+			print USAGE
+			sys.exit(0)
+	if not args:
+		args = glob.glob ('./*')
+	if recurse:
+		i = 0
+		while i < len (args):
+			if args[i][-4:] != '/CVS' and \
+					args[i][-5:] != '/SCCS':
+				args = args + glob.glob (os.path.join ( \
+					args[i], '*'))
+			i = i + 1
+	return args
+
+if __name__ == '__main__':
+	names = processOptions ()
+	print LEGEND
+	for name in names:
+		processFile (name)

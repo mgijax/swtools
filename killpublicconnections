@@ -1,0 +1,100 @@
+#!/usr/local/bin/python
+
+import sys
+if '/usr/local/mgi/live/lib/python' not in sys.path:
+	sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+
+import db
+import getopt
+
+usage = '''Usage: %s
+    Mandatory arguments:
+	-U <db username> : must have sa_role in order to execute properly
+	-D <database name>
+	-S <database server>
+    and one of these:
+	-P <password>
+	-p <password file>
+''' % sys.argv[0]
+
+
+### global variables ###
+
+server = None
+database = None
+username = None
+password = None
+
+### functions ###
+
+def bailout (s):
+	print usage
+	print s
+	sys.exit(1)
+
+### main program ###
+
+# handle arguments
+
+try:
+	[options, args] = getopt.getopt (sys.argv[1:], 'U:P:D:S:p:')
+except getopt.error:
+	bailout ('Error: invalid arguments')
+
+if args:
+	bailout('Error: found extra arguments')
+
+for (option, value) in options:
+	if option == '-U':
+		username = value
+	elif option == '-D':
+		database = value
+	elif option == '-S':
+		server = value
+	elif option == '-P':
+		password = value
+	elif option == '-p':
+		try:
+			fp = open (value, 'r')
+			lines = fp.readlines()
+			fp.close()
+			password = lines[0].rstrip()
+		except:
+			bailout ('Error: failed in reading from %s' % value)
+
+# check for missing arguments
+
+if not server:
+	bailout('Error: missing server name')
+if not database:
+	bailout('Error: missing database name')
+if not username:
+	bailout('Error: missing username name')
+if not password:
+	bailout('Error: missing password name')
+
+# db login
+
+db.set_sqlLogin (username, password, server, database)
+
+print '%s..%s user:%s' % (server, database, username)
+
+killed = 0
+total = 0
+
+# walk through list of current users and kill those for mgd_public in the
+# specified database
+
+results = db.sql ('sp_who', 'auto')
+for row in results:
+	if (row['loginame'] == 'mgd_public') and (row['dbname'] == database):
+		total = total + 1
+		try:
+			db.sql ('kill %s' % row['spid'], 'auto')
+			killed = killed + 1
+		except:
+			pass
+
+# final reporting
+
+print 'killed %d of %d mgd_public connections' % (killed, total)

@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# redirect a soft link to a new place (I get tired of typing two commands
+# to do one task.)
+
+USAGE="Usage: $0 <source> <symbolic link name>\n
+\t<source> is the file/directory to which you wish to link
+"
+
+if [ $# -ne 2 ]; then
+	echo $USAGE
+	exit 1
+fi
+
+SOURCE=$1
+LINK=$2
+CHECK_SOURCE=`ls -d $SOURCE 2>/dev/null`
+CHECK_LINK=`ls -d $LINK 2>/dev/null`
+PREV=""
+
+# If the specified "link name" exists, then check that it is actually a link.
+
+if [ -n "$CHECK_LINK" ]; then
+	if [ ! -h $LINK ]; then
+		echo $USAGE
+		echo "$LINK is not a symbolic link.  $0 failed."
+		exit 2
+	fi
+	PREV=`ls -al $LINK | sed 's/.*-> //'`
+fi
+
+# Ensure that the specified "source" actually exists.
+
+if [ -z "$CHECK_SOURCE" ]; then
+	echo $USAGE
+	echo "$SOURCE does not exist.  $0 failed."
+	exit 3
+fi
+
+# Remove any old link, and redirect it.
+
+if [ -h $LINK ]; then
+	rm $LINK
+fi
+ln -s $SOURCE $LINK
+
+if [ -n "$PREV" ]; then
+	echo "Previous:	$LINK -> $PREV"
+fi
+echo "Updated:	$LINK -> $SOURCE"

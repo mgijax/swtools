@@ -1,0 +1,8 @@
+#!/bin/sh
+
+while [ $# -gt 0 ]
+do
+	echo "Converting: $1"
+	mac2unix "$1" "$1"
+	shift
+done

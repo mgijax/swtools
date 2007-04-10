@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# wrapper to set up default options for using enscript to print text
+# two-sides with two pages per side.  works with either a list of files, or
+# with piped-in input
+
+# Our enscript options are:
+#	-j			draws borders around the columns
+#	-2			two columns on each side of the page
+#	-D			sets specified page device definition
+#	-r			landscape mode
+#	--mark-wrapped-lines	specifies how we denote lines that are wrapped
+#	--rotate-even-pages	rotate even-numbered pages (for 2nd side)
+#	-b			specifies the text for the header line
+#	-C			adds line numbers
+
+ENSCRIPT='-j -2 -DDuplex:true -r --mark-wrapped-lines=box --rotate-even-pages -b "$n $W $C|Page $% of $=|Printed by %n on %W %C" -C'
+
+export ENSCRIPT		## make available as an env var when invoking commands
+
+if [ $# -gt 0 ]; then	## one or more filenames passed in
+	for fn in $*		# loop through and print each file separately
+	do
+		enscript $fn
+	done
+else			## input to enscript is being piped in on stdin
+	1>&4			# preserve stdout
+	0>&1			# hook stdin to stdout
+	enscript		# call enscript to take input from stdin
+	1>&0			# restore stdin
+	4>&1			# restore stdout
+fi

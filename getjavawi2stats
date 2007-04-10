@@ -1,0 +1,58 @@
+#!/usr/local/bin/python
+
+# reads from the Java WI's Admin.jsp script, to parse out several vital
+# parameters and print them.
+
+import sys
+sys.path.append ('/usr/local/mgi/live/lib/python/')
+
+import httpReader
+import string
+import regex
+
+url = 'http://www.informatics.jax.org/javawi2/Admin.jsp'
+
+lines, errors = httpReader.getURL (url)
+
+if errors:
+	print 'Errors:'
+	print string.join(lines, '\n')
+	sys.exit(1)
+
+desired = [
+	'Memory Free',
+	'Memory Used',
+	'Memory Total',
+	'Memory % Free',
+	'Page Cache Hits',
+	'Page Cache Misses',
+	'Page Cache Hit Rate',
+	'Database',
+	]
+
+td_re = regex.compile('<TD[^>]*>' + '\([^<]+\)' + '</TD>')
+
+i = 0
+collected = []
+num_lines = len(lines)
+max_len = 0
+
+while i < num_lines:
+	matched = td_re.search(lines[i])
+	if matched != -1:
+		item = td_re.group(1)
+
+		if item in desired:
+			i = i + 1
+			matched = td_re.search(lines[i])
+			if matched != -1:
+				value = td_re.group(1)
+
+				collected.append ( (item, value) )
+
+				if len(item) > max_len:
+					max_len = len(item)
+	i = i + 1
+
+for (item, value) in collected:
+	print string.ljust (item, max_len), ':', value

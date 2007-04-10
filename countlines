@@ -1,0 +1,44 @@
+#!/bin/sh
+
+# counts the number of lines in one or more files, prints the results, and
+# a total
+
+lineout()	# $1 = count string (10 cols), $2 = description (left align)
+{
+	s="$1"
+	i=`expr "$s" : '.*'`		# figure string length of $1
+	while [ $i -lt 10 ]		# pad (with Q) to 10 characters
+	do
+		s='Q'$s
+		i=`expr $i + 1`
+	done
+	echo "`echo $s | sed 's/Q/ /g'` $2"	# output line with 'Q'-->' '
+}
+
+dolist()
+{
+	for item in $@
+	do
+		if [ -h $item ]; then		# symbolic link - do nothing
+			:
+		elif [ -d $item ]; then		# directory - recurse into it
+			dolist $item/*
+		else				# file - process it
+			ct=`wc -l $item | awk '{print $1}'`
+			total=`expr $total + $ct`
+			lineout $ct $item
+		fi
+	done
+}
+
+if [ $# -eq 0 ]; then
+	list="."
+else
+	list=$@
+fi
+
+total=0
+dolist $list
+
+lineout "-------" "---------------"
+lineout $total "total"

@@ -1,0 +1,45 @@
+#!/usr/local/bin/python
+
+import sys
+import string
+import regsub
+
+USAGE = '%s [<input filename>] [<output filename>]' % sys.argv[0]
+
+if len(sys.argv) == 1:
+	infile = None
+	outfile = None
+elif len(sys.argv) == 2:
+	infile = sys.argv[1]
+	outfile = None
+elif len(sys.argv) == 3:
+	infile = sys.argv[1]
+	outfile = sys.argv[2]
+else:
+	print USAGE
+	sys.exit(1)
+
+if infile:
+	in_fp = open (infile, 'r')
+else:
+	in_fp = sys.stdin
+
+lines = []
+line = in_fp.readline()
+while line:
+	lines.append (regsub.gsub ('\r', '\n', line))
+	line = in_fp.readline()
+
+if infile:
+	in_fp.close()
+
+if outfile:
+	out_fp = open (outfile, 'w')
+else:
+	out_fp = sys.stdout
+
+for line in lines:
+	out_fp.write (line)
+
+if outfile:
+	out_fp.close()

@@ -1,0 +1,106 @@
+#!/usr/local/bin/python
+
+# finds the first occurrence of each search string in files which contain all
+# search strings, lists the position of each first match
+
+import os
+import string
+import getopt
+import sys
+
+USAGE = '''Usage: %s [-f <file>][-d <dir>] <string 1> [<string n>...]
+	searches for files containing all specified search strings, giving
+	the position of the first occurrence of each.
+	
+	must use -f or -d.  if using -d, will recursively traverse the
+	directory hierarchy.  also when using -d, does not traverse or search
+	symbolic links.
+''' % sys.argv[0]
+
+FILE = None
+DIRECTORY = None
+SEARCH_STRINGS = []
+NUM_STRINGS = 0
+
+def bailout (s):
+	print 'Error: %s' % s
+	print USAGE
+	sys.exit(1)
+
+def processParameters ():
+	global FILE, DIRECTORY, SEARCH_STRINGS, NUM_STRINGS
+
+	try:
+		opts, args = getopt.getopt (sys.argv[1:], 'f:d:')
+	except:
+		bailout ('Invalid options specified.')
+
+	for (option, value) in opts:
+		if option == '-f':
+			if not os.path.exists (value):
+				bailout ('Invalid file for -f: %s' % value)
+			FILE = value
+
+		if option == '-d':
+			if not os.path.isdir (value):
+				bailout ('Invalid directory for -d: %s' % \
+					value)
+			DIRECTORY = value
+
+	if (FILE == None) and (DIRECTORY == None):
+		bailout ('Too few options specified.  Must use -d or -f.')
+
+	if len(args) < 1:
+		bailout ('Too few search strings specified.')
+
+	SEARCH_STRINGS = args
+	NUM_STRINGS = len(SEARCH_STRINGS)
+	return
+
+def searchFile (file):
+	fp = open (file, 'r')
+	lines = fp.readlines() 
+	fp.close() 
+
+	positions = []
+
+	contents = string.join (lines, '')
+	for s in SEARCH_STRINGS:
+		pos = string.find (contents, s)
+		if pos == -1:
+			return
+		positions.append (pos)
+
+	print '%s (length %d)' % (file, len(contents))
+	i = 0
+	while i < NUM_STRINGS:
+		print '    %s : %d' % (SEARCH_STRINGS[i], positions[i])
+		i = i + 1
+	print
+
+	return
+
+def searchDirectory (directory):
+	for file in os.listdir(directory):
+		f = os.path.join (directory, file)
+		if os.path.islink(f):
+			pass
+		elif os.path.isdir(f):
+			searchDirectory(f)
+		elif os.path.isfile(f):
+			searchFile (f)
+	return
+
+def main():
+	if len(sys.argv) < 2:
+		bailout ('Too few arguments.  Must specify search strings.')
+
+	processParameters()
+	if FILE:
+		searchFile (FILE)
+	elif DIRECTORY:
+		searchDirectory (DIRECTORY)
+	return
+
+if __name__ == '__main__':
+	main()

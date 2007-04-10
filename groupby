@@ -1,0 +1,136 @@
+#!/usr/local/bin/python
+
+# parse a log file to group results by a particular field and allow MGI
+# addresses to be optionally excluded
+
+import os
+import sys
+import string
+import getopt
+
+USAGE = '''Usage: %s [-x <field #>] [-n <count>] [-f <filename>] <field #>
+	-x : exclude lines with MGI IP addresses/machine names in that field
+	-n : show only the 'count' most-hit pages/files
+	-f : read from given filename (reads from stdin by default)
+	
+	The final 'field #' specifies the field on which to group the lines
+	for counting.  Note that field numbers start at 1, not 0.''' % \
+		os.path.basename(sys.argv[0])
+
+def log (message):
+	sys.stderr.write (message + '\n')
+	return
+
+def bailout (message = USAGE):
+	log (message)
+	sys.exit(0)
+
+def getOptions ():
+	try:
+		optlist, args = getopt.getopt (sys.argv[1:], 'x:n:f:')
+	except getopt.error:
+		log ('Bad parameters.')
+		bailout()
+
+	if len(args) != 1:
+		log ('Must specify the field number on which to group')
+		bailout()
+	try:
+		groupBy = string.atoi (args[0]) - 1
+	except:
+		log ('Must specify integer field number on which to group')
+		bailout()
+
+	fp = sys.stdin		# defaults
+	MGIfield = None
+	showCount = None
+
+	for option, value in optlist:
+		if option == '-x':
+			try:
+				MGIfield = string.atoi (value) - 1
+			except:
+				log ('Must be integer field number after -x')
+				bailout()
+		elif option == '-n':
+			try:
+				showCount = string.atoi (value)
+			except:
+				log ('Must be integer after -n')
+				bailout()
+		elif option == '-f':
+			try:
+				fp = open (value, 'r')
+			except:
+				log ('Could not open file "%s"' % value)
+				bailout()
+	return (groupBy, fp, MGIfield, showCount)
+
+cache = {}
+
+def isMGI(s):
+	global cache
+	if cache.has_key (s):
+		return cache[s]
+
+	if string.find (s, '192.233.41') == 0:
+		cache[s] = 1
+	elif string.find (s, '209.222.209') == 0:
+		cache[s] = 1
+	elif string.find (s, 'informatics.jax.org') != -1:
+		cache[s] = 1
+	elif string.find (s, '.') != -1:
+		cache[s] = 0
+	else:
+		cache[s] = 0
+		fp = os.popen ('nslookup %s' % s)
+		lines = fp.readlines()[3:]
+		fp.close()
+		for line in lines:
+			if line[:4] == 'Name':
+				if string.find (line, 'informatics.jax.org') \
+					!= -1:
+						cache[s] = 1
+	return cache[s]
+
+def main():
+	groupBy, fp, MGIfield, showCount = getOptions()
+
+	if MGIfield is not None:
+		highestField = max (groupBy, MGIfield) + 1
+	else:
+		highestField = groupBy + 1
+
+	counter = 0
+	dict = {}
+	line = fp.readline()
+	while line:
+		counter = counter + 1
+		items = string.split (line)
+		if len(items) < highestField:
+			log ('Line %d contains too few fields' % counter)
+		elif (MGIfield is None) or (not isMGI(items[MGIfield])):
+			item = items[groupBy]
+			if dict.has_key(item):
+				dict[item] = dict[item] + 1
+			else:
+				dict[item] = 1
+		line = fp.readline()
+
+	list = []
+	for k in dict.keys():
+		list.append ( (dict[k], k) )
+	list.sort()
+	list.reverse()
+	if showCount is not None:
+		list = list[:showCount]
+
+	for (count, page) in list:
+		print '%6d  %s' % (count, page)
+
+	if fp != sys.stdin:
+		fp.close()
+	return
+
+if __name__ == '__main__':
+	main()

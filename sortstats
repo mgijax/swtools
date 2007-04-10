@@ -1,0 +1,26 @@
+#!/usr/local/bin/python
+
+import os
+import sys
+import pstats
+
+USAGE = 'Usage:  %s <filename for Stats object>\n' % sys.argv[0]
+
+def bailout (s = None):
+	if s:
+		print s
+	print USAGE
+	sys.exit(-1)
+
+if len(sys.argv) < 2:
+	bailout ('Too few arguments')
+
+filename = sys.argv[1]
+
+if not os.path.exists (filename):
+	bailout ('Unknown filename: %s' % filename)
+
+p = pstats.Stats(filename)
+p.strip_dirs()
+p.sort_stats('time')
+p.print_stats()

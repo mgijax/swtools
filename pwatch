@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# check to ensure that we have a valid command line
+if [ $# -eq 0 ]
+then
+	echo "Usage:  $0 <process number or regex for command>"
+	exit 1
+fi
+
+# define a line break as the only separator
+IFS='
+'
+
+# function to see whether the process is still active.  $1 is a process ID.
+notThere() {
+	LINES=`ps -aef | grep "$1"`
+	FOUND=0
+	for LINE in $LINES
+	do
+		if [ `type $LINE | awk '{print $2}'` -eq $1 ]; then
+			FOUND=1
+		fi
+	done
+	return $FOUND
+}
+
+# if we are given a process number, then use it.  if we are given a string,
+# then we need to try to look up the process number.
+
+expr "$1" + 1 >/dev/null 2>&1
+if [ $? -lt 2 ]; then		# error values less than 2 --> $1 is numeric
+	if notThere $1
+	then
+		echo "Process \"$1\" does not exist."
+		exit 1
+	else
+		PID=$1
+	fi
+else
+	LINES=`ps -aef`
+	LINES=`type $LINES | grep "$1" | grep -v "$0" | grep -v 'grep .*'$0`
+	COUNT=`type $LINES | wc -l`
+	if [ $COUNT -gt 1 ]; then
+		echo "$COUNT entries matched \"$1\".  Be more specific."
+		exit 1
+	fi
+	PID=`type $LINES | awk '{print $2}'`
+fi
+
+MSG=
+COUNT=0
+SLEEPTIME=30
+MAXWAITS=960
+
+while [ -z "$MSG" ]
+do
+	if notThere $PID
+	then
+		MSG="$0 reports success.  Process \"$1\" has completed."
+	else
+		COUNT=`expr $COUNT + 1`
+		if [ $COUNT -gt $MAXWAITS ]
+		then
+			MSG="$0 reports failure.  Process \"$1\" is still running."
+		else
+			sleep $SLEEPTIME
+		fi
+	fi
+done
+
+echo $MSG | mail `whoami`"@informatics.jax.org"

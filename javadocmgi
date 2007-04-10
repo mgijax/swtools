@@ -1,0 +1,3 @@
+#!/bin/sh
+
+/usr/j2se/bin/javadoc -tag is:a:"Is:" -tag has:a:"Has:" -tag does:a:"Does:" -tag purpose:a:"Purpose:" -tag abstract:a:"Abstract:" -tag implementation:a:"Implementation:" -tag return -tag assumes:a:"Assumes:" -tag effects:a:"Effects:" -tag throws $*

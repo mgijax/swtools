@@ -1,0 +1,28 @@
+#!/bin/sh
+
+USAGE="Usage: $0 <filename> [start line #] [stop line #]\n
+\tIf you specify neither line number, the whole file is printed.\n
+\tIf you specify only one line number, printing begins at that line\n
+\tand goes through the end of the file.\n
+"
+
+SNIP='snip'
+
+if [ $# -lt 1 ]; then
+	echo $USAGE
+	exit 1;
+elif [ $# -gt 3 ]; then
+	echo $USAGE
+	exit 1;
+fi
+
+START="-2"
+if [ $# -gt 1 ]; then
+	START=`expr $2 - 3`
+fi
+OPTION="-C$START"
+
+ENSCRIPT='-j -2 -DDuplex:true -r --mark-wrapped-lines=box --rotate-even-pages -b "$n $W $C|Page $% of $=|Printed by %n on %W %C"'
+export ENSCRIPT		## make available as an env var when invoking commands
+
+cat $1 | $SNIP $2 $3 | enscript $OPTION

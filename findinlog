@@ -1,0 +1,79 @@
+#!/usr/local/bin/python
+
+# looks for a given search string in a web access log, breaks counts down by
+# day of the month
+
+import sys
+import string
+
+USAGE = '%s <search string> <filename>' % sys.argv[0]
+
+daysInMonth = {	'Jan'	: 31,	'Feb'	: 28,	'Mar'	: 31,
+		'Apr'	: 30,	'May'	: 31,	'Jun'	: 30,
+		'Jul'	: 31,	'Aug'	: 31,	'Sep'	: 30,
+		'Oct'	: 31,	'Nov'	: 30,	'Dec'	: 31 }
+
+def zeroPad (s, width = 2):
+	return '%s%s' % ('0' * (width - len(str(s))), s)
+
+def fillDateZeroes (dict):
+	if len(dict) > 0:
+		[day, month, year] = string.split (dict.keys()[0], '/')
+		for i in range(1, daysInMonth[month] + 1):
+			key = '%s/%s/%s' % (zeroPad(i), month, year)
+			if not dict.has_key(key):
+				dict[key] = 0
+	return dict
+
+def main (s, filename):
+	fp = open (filename, 'r')
+
+	daily = {}
+
+	line = fp.readline()
+	while line:
+		foundAt = string.find (line, s)
+		if foundAt != -1:
+			items = string.split (line)
+			datetime = items[3][1:]
+			pos = string.find(datetime, ':')
+			date = datetime[:pos]
+
+			if not daily.has_key(date):
+				daily[date] = 0
+			daily[date] = daily[date] + 1
+
+		line = fp.readline()
+	fp.close()
+
+	daily = fillDateZeroes (daily)
+	counts = daily.items()
+	counts.sort()
+
+	if daily:
+		maxCount = max(daily.values())
+	else:
+		maxCount = 0
+
+	if maxCount >= 58:
+		perStar = maxCount / 58
+	else:
+		perStar = min (maxCount, 1)
+
+	print 'Daily hits containing string "%s"' % s
+	print
+
+	print '%-11s %-6s %s' % ('Date', 'Hits', '* = %d hits' % perStar)
+	print '%11s %6s %s' % ('-----------', '------',
+		'-' * len('* = %d hits' % perStar))
+
+	for (day, count) in counts:
+		print '%11s %6s %s' % (day, count, '*' * (count / perStar))
+	return
+
+if __name__ == '__main__':
+	if len(sys.argv) != 3:
+		print 'Error in command line.\n'
+		print USAGE
+		sys.exit(1)
+	main (sys.argv[1], sys.argv[2])

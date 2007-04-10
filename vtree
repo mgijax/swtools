@@ -1,0 +1,45 @@
+#!/usr/local/bin/python
+
+import sys
+import os
+
+SP = '|  '
+
+def dirSort (parent, l):
+	dirs = []
+	files = []
+	for f in l:
+		fn = os.path.join (parent, f)
+		if os.path.islink (fn):
+			tfn = f + '@'
+		else:
+			tfn = f
+		if os.path.isfile (fn):
+			files.append (tfn)
+		else:
+			dirs.append (tfn)
+	dirs.sort ()
+	files.sort ()
+	return files, dirs
+
+def trace (parent, dir, lvl):
+	fp = os.path.join (parent, dir)
+	try:
+		contents = os.listdir (fp)
+		files, dirs = dirSort (fp, contents)
+		for f in files:
+			print SP * lvl + f
+		for d in dirs:
+			print SP * lvl + d + '/'
+			trace (fp, d, lvl + 1)
+	except:
+		pass
+	return
+
+if __name__ == '__main__':
+	if len(sys.argv) == 1:
+		dir = '.'
+	else:
+		dir = sys.argv[1]
+	print '%s/' % dir
+	trace ('', dir, 1)

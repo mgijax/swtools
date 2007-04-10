@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# wrapper over sed, handles multiple files
+# useful for replacing library / function names in several source files
+
+if [ $# -lt 3 ]; then
+	echo "Usage:  $0 <from regex> <to string> <filename>..."
+	exit 1
+fi
+
+FROM=$1
+TO=$2
+shift 2
+
+while [ $# -gt 0 ]
+do
+	echo "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+	FILE=$1
+	if [ -h $FILE ]; then
+		echo "skipped $FILE, as it is a symbolic link"
+	
+	elif [ -d $FILE ]; then
+		echo "skipped $FILE, as it is a directory"
+	else
+		echo "processing $FILE..."
+		sed "s/$FROM/$TO/g" $FILE > $FILE.tmp
+		diff $FILE $FILE.tmp
+		cp $FILE.tmp $FILE
+		rm $FILE.tmp
+	fi
+	shift
+done

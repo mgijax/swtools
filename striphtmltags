@@ -1,0 +1,11 @@
+#!/usr/local/bin/python
+
+import sys
+sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+
+import mgi_html
+
+lines = sys.stdin.readlines()
+lines = mgi_html.stripHtmlTags (lines)
+for line in lines:
+	print line[:-1]			# strip ending linefeed

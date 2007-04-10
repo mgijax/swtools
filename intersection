@@ -1,0 +1,19 @@
+#!/usr/local/bin/python
+
+import sys
+import string
+
+file1 = sys.argv[1]
+file2 = sys.argv[2]
+
+fp = open (file1, 'r')
+lines1 = fp.readlines()
+fp.close()
+
+fp = open (file2, 'r')
+lines2 = fp.readlines()
+fp.close()
+
+for line in lines1:
+	if line in lines2:
+		print line,

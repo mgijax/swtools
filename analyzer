@@ -1,0 +1,217 @@
+#!/usr/local/bin/python
+
+# use as:
+#	analyzer <filename> [<filename> ...]
+# or:
+#	ls *.py | analyzer
+# or:
+#	cat filenames.txt | analyzer
+# or:
+#	analyzer (then type filenames line-by-line, ending with a blank line)
+
+import sys
+import string
+
+PAGE_LENGTH = 68
+
+class output:
+	def __init__ (self):
+		self.pos = 0
+		self.strings = []
+	def add (self, *s):
+		for item in list (s):
+			self.strings.insert (self.pos, item)
+			self.pos = self.pos + 1
+	def rewind (self):
+		self.pos = 0
+	def erase (self):
+		self.pos = 0
+		self.strings = []
+	def to_end (self):
+		self.pos = len (self.strings)
+	def play (self):
+		for s in self.strings:
+			print s
+
+
+def analyze_all (filenames):
+	blank_lines = 0
+	comment_lines = 0
+	code_lines = 0
+	comment_chars = 0
+	code_chars = 0
+	total_pages = 0
+
+	out = output ()
+
+	for filename in filenames:
+		tuple = analyze (filename, out)
+
+		blank_lines = blank_lines + tuple [0]
+		comment_lines = comment_lines + tuple [1]
+		code_lines = code_lines + tuple [2]
+		comment_chars = comment_chars + tuple [3]
+		code_chars = code_chars + tuple [4]
+		total_pages = total_pages + tuple [5]
+
+	total_lines = blank_lines + comment_lines + code_lines
+	total_chars = comment_chars + code_chars
+
+	if len (filenames) > 1:
+		out.rewind ()
+		out.add ('', 'Summary:', '--------')
+		out.add ('           Lines    % Lines    Characters    ' + \
+			'% Characters')
+		out.add ('           -----    -------    ----------    ' + \
+			'------------')
+		out.add ('Blank      ' + iformat (blank_lines, 5) + \
+			pformat (blank_lines, total_lines, 11))
+		out.add ('Comments   ' + iformat (comment_lines, 5) + \
+			pformat (comment_lines, total_lines, 11) + \
+			iformat (comment_chars, 14) + \
+			pformat (comment_chars, total_chars, 16))
+		out.add ('Code       ' + iformat (code_lines, 5) + \
+			pformat (code_lines, total_lines, 11) + \
+			iformat (code_chars, 14) + \
+			pformat (code_chars, total_chars, 16))
+		out.add ('')
+		out.add ('Total      ' + iformat (total_lines, 5) + \
+			iformat (total_chars, 25) + string.rjust (' ', 16) + \
+			'   Pages: ' + str (total_pages), '', '')
+	out.play ()
+
+
+def iformat (i, spaces):
+	return string.rjust (str (i), spaces)
+
+
+def pformat (numer, denom, spaces):
+	numer = numer * 100
+	(div, mod) = divmod (numer, denom)
+	if (mod * 2) < denom:
+		return iformat (div, spaces)
+	else:
+		return iformat (div + 1, spaces)
+
+
+def sum (items):
+	s = 0
+	for item in items:
+		s = s + item
+	return s
+
+
+def strip_lines (lines):
+	s = []
+	for line in lines:
+		s.append (string.strip (line))
+	return s
+
+
+def note_blanks (lines):
+	s = []
+	for line in lines:
+		s.append (len (line) == 0)
+	return s
+
+
+def note_comments (lines):
+	s = []
+	for line in lines:
+		line_len = len (line)
+		if line_len > 0:
+			if line [0] == '#':
+				s.append (1)
+			elif (line_len > 2) and (line [0:3] == "'''"):
+				s.append (1)
+			else:
+				s.append (0)
+		else:
+			s.append (0)
+	return s
+
+
+def note_lengths (lines):
+	s = []
+	for line in lines:
+		s.append (len (line))
+	return s
+
+
+def note_comment_lengths (lines, flags):
+	s = []
+	num_lines = len (lines)
+	for i in range (0, num_lines):
+		if flags [i] > 0:
+			s.append (len (lines [i]))
+		else:
+			com_pos = string.find (lines [i], '#')
+			if com_pos >= 0:
+				s.append (len (lines [i]) - com_pos)
+			else:
+				s.append (0)
+	return s
+
+
+def analyze (fn, out):
+	fp = open (fn, 'r')
+	raw_lines = fp.readlines ()
+	fp.close ()
+
+	stripped_lines = strip_lines (raw_lines)
+
+	comment_flags = note_comments (stripped_lines)
+
+	total_lines = len (raw_lines)
+	blank_lines = sum (note_blanks (stripped_lines))
+	comment_lines = sum (comment_flags)
+	code_lines = total_lines - blank_lines - comment_lines
+
+
+	total_chars = sum (note_lengths (raw_lines))
+	comment_chars = sum (note_comment_lengths (raw_lines, comment_flags))
+	code_chars = total_chars - comment_chars
+
+	(pages, leftovers) = divmod (total_lines, PAGE_LENGTH)
+	if leftovers > 0:
+		pages = pages + 1
+
+	out.add ('', '********** ' + fn, '')
+	out.add ('Measure                     Total      Blank   Comments ' + \
+		'      Code')
+	out.add ('---------------------- ---------- ---------- ---------- ' + \
+		'----------')
+	out.add ('Whole Lines           ' + iformat (total_lines, 11) + \
+		iformat (blank_lines, 11) + iformat (comment_lines, 11) + \
+		iformat (code_lines, 11))
+	out.add ('Percent of Lines      ' + iformat (100, 11) + \
+		pformat (blank_lines, total_lines, 11) + \
+		pformat (comment_lines, total_lines, 11) + \
+		pformat (code_lines, total_lines, 11))
+	out.add ('Printed Pages         ' + iformat (pages, 11), '')
+	out.add ('Characters            ' + iformat (total_chars, 11) + \
+		'           ' + iformat (comment_chars, 11) + \
+		iformat (code_chars, 11))
+	out.add ('Percent of Characters ' + iformat (100, 11) + '           ' +\
+		pformat (comment_chars, total_chars, 11) + \
+		pformat (code_chars, total_chars, 11), '')
+
+	return (blank_lines, comment_lines, code_lines, comment_chars, \
+		code_chars, pages)
+
+
+if __name__ == '__main__':
+	if len (sys.argv) > 1:
+		analyze_all (sys.argv [1:])
+	else:
+		files = []
+		done = None
+		while not done:
+			try:
+				s = raw_input ()
+				done = (len (s) == 0)
+				if not done:
+					files.append (s)
+			except:
+				done = 1
+		analyze_all (files)

@@ -1,0 +1,56 @@
+#!/usr/local/bin/python
+
+# finds the most common words in a series of files
+
+import sys
+import string
+
+words = {}
+
+def isNumeric (s):
+	for c in s:
+		if c < '0' or c > '9':
+			return 0
+	return 1
+
+def stripPunctuation (s):
+	t = ''
+	for c in s:
+		if ('a' <= c <= 'z') or ('0' <= c <= '9') or (c in string.whitespace):
+			t = t + c
+		else:
+			t = t + ' '
+	return t
+		
+def processFile (f):
+	global words
+
+	fp = open(f, 'r')
+	line = fp.readline()
+	while line:
+		tokens = string.split(stripPunctuation(line))
+		for tok in tokens:
+			if isNumeric(tok):
+				continue
+			if tok == '':
+				continue
+			if words.has_key(tok):
+				words[tok] = words[tok] + 1
+			else:
+				words[tok] = 1
+		line = fp.readline()
+	fp.close()
+	return
+
+for file in sys.argv[1:]:
+	processFile (file)
+
+list = []
+for (token, count) in words.items():
+	list.append ( (count, token) )
+
+list.sort()
+list.reverse()
+
+for (count, token) in list[:30]:
+	print '%10d : %s' % (count, token)

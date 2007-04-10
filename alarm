@@ -1,0 +1,91 @@
+#!/usr/local/bin/python
+
+import string
+import regex
+import sys
+import time
+
+hour = 0
+minute = 0
+second = 0
+
+day = 0
+month = 0
+year = 0
+
+weekday = -1
+julian = -1
+dst = -1
+
+re_time2 = regex.compile ('\([0-1]?[0-9]\)'
+		':'
+		'\([0-1][0-9]\)')
+re_time3 = regex.compile ('\([0-1]?[0-9]\)'
+		':'
+		'\([0-1][0-9]\)'
+		':'
+		'\([0-5][0-9]\)')
+
+def time_tuple ():
+	return (year, month, day, hour, minute, second, weekday, julian, dst)
+
+def init ():
+	global hour, minute, day, month, year
+
+	(year, month, day, hour, minute, ign1, ign2, ign3, ign4) = \
+		time.localtime (time.time ())
+	return
+
+def beep ():
+	print "",
+	return
+
+def toInt (s):
+	try:
+		i = string.atoi (s)
+	except:
+		print "non-integer time component: %s" % s
+		sys.exit(0)
+	return i
+
+def main ():
+	global hour, minute, second, day, month, year
+
+	init ()
+	if len(sys.argv) != 2:
+		print "Usage: %s hh:mm[:ss]" % sys.argv[0]
+		sys.exit(0)
+
+	pieces = string.split (sys.argv[1], ':')
+	if len(pieces) not in [2,3]:
+		print "incorrect time specification: %s" % sys.argv[1]
+		sys.exit(0)
+
+	hour = toInt (pieces[0])
+	if hour not in range (0,24):
+		print "hours out of range: %d" % hour
+		sys.exit(0)
+
+	minute = toInt (pieces[1])
+	if minute not in range(0,60):
+		print "minutes out of range: %d" % minute
+		sys.exit(0)
+
+	if len(pieces) == 3:
+		second = toInt (pieces[2])
+		if second not in range(0,60):
+			print "seconds out of range: %d" % minute
+			sys.exit(0)
+
+	diff = time.mktime (time_tuple()) - time.time ()
+	if diff <= 0:
+		print "time already elapsed"
+	else:
+		time.sleep (diff)
+		for i in range (0,10):
+			beep ()
+			time.sleep (1)
+
+if __name__ == '__main__':
+	main ()
+

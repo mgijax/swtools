@@ -1,0 +1,126 @@
+#!/usr/local/bin/python
+
+# Program: htmanage.py
+# Purpose: allow easy management of user files for .htaccess
+
+import sys
+import getopt
+import HTPassword
+
+USAGE = '''Usage:
+	%s <-a | -c | -d | -D | -i> <username> <filename>
+
+	Manages usernames and passwords for .htaccess-style password files.
+
+	Actions:
+		-a : add a new user with the given <username>
+		-c : change the password for the given <username>
+		-d : disable access for the given <username>
+		-D : delete the given <username>
+		-i : is the specified <username> in the password file?
+
+	<username> : name of the user on which to perform the action
+	<filename> : path to the file containing user information
+
+	All actions have an exit value of 0 when completed successfully, or
+	an exit value of -1 when they do not.
+''' % sys.argv[0]
+
+SUCCESS = 0
+FAILURE = -1
+
+
+def exit (s, code):
+	print s
+	sys.exit (code)
+
+def processCommandLine (arguments):
+	optlist, args = getopt.getopt (arguments, 'a:c:d:D:i:')
+
+	if len (optlist) == 0:
+		exit (USAGE, FAILURE)
+	if len (optlist) != 1:
+		exit ('Please specify one action/username pair', FAILURE)
+	if len (args) != 1:
+		exit ('Please specify exactly one filename', FAILURE)
+
+	(action, username) = optlist [0]
+	try:
+		pwdFile = HTPassword.HTPassword (args[0])
+	except:
+		exit ('Could not open "%s"' % args[0], FAILURE)
+
+	return (action, username, pwdFile)
+
+def readPassword (s):
+	return raw_input (s)
+
+def getPassword ():
+	pwd1 = readPassword ('Enter new password: ')
+	if (pwd1 == ''):
+		return (pwd1, 'Password cannot be empty', FAILURE)
+
+	pwd2 = readPassword ('Enter new password again: ')
+	if (pwd1 != pwd2):
+		return (pwd1, 'Passwords did not match', FAILURE)
+
+	return (pwd1, 'Password is valid', SUCCESS)
+
+def isUser (username, pwdFile):
+	if pwdFile.isUser (username):
+		return ('%s is a user' % username, SUCCESS)
+	return ('%s is not a user' % username, FAILURE)
+
+def addUser (username, pwdFile):
+	if pwdFile.isUser (username):
+		return ('%s is already a user' % username, FAILURE)
+
+	(pwd, msg, code) = getPassword ()
+	if (code != SUCCESS):
+		return (msg, code)
+
+	if pwdFile.addUser (username, pwd):
+		return ('%s was added' % username, SUCCESS)
+	return ('%s could not be added' % username, FAILURE)
+
+def changePassword (username, pwdFile):
+	if not pwdFile.isUser (username):
+		return ('%s is not a user' % username, FAILURE)
+
+	(pwd, msg, code) = getPassword ()
+	if (code != SUCCESS):
+		return (msg, code)
+
+	if pwdFile.setPassword (username, pwd):
+		return ('Password for %s was changed' % username, SUCCESS)
+	return ('Password for %s could not be changed' % username, FAILURE)
+
+def disable (username, pwdFile):
+	if not pwdFile.isUser (username):
+		return ('%s is not a user' % username, FAILURE)
+
+	if pwdFile.unsetPassword (username):
+		return ('Account for %s was disabled' % username, SUCCESS)
+	return ('Account for %s could not be disabled' % username, FAILURE)
+
+def delete (username, pwdFile):
+	if not pwdFile.isUser (username):
+		return ('%s is not a user' % username, FAILURE)
+
+	if pwdFile.removeUser (username):
+		return ('Account for %s was removed' % username, SUCCESS)
+	return ('Account for %s could not be removed' % username, FAILURE)
+
+def main():
+	(action, username, pwdFile) = processCommandLine (sys.argv[1:])
+
+	handlers = {	'-d' : disable,		'-D' : delete,
+			'-a' : addUser,		'-c' : changePassword,
+			'-i' : isUser		}
+	msg, code = handlers[action](username, pwdFile)
+
+	pwdFile.close ()
+	exit (msg, code)
+
+if __name__ == '__main__':
+	main ()

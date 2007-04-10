@@ -1,0 +1,39 @@
+#!/bin/sh
+
+if [ $# -eq 0 ]
+then
+	echo "Usage:  $0 <user>@<workstation>"
+	exit 1
+fi
+
+IFS='
+'
+THERE=
+MSG=
+COUNT=0
+SLEEPTIME=30
+MAXWAITS=960
+
+while [ -z "$MSG" ]
+do
+	for line in `finger $1 | sed -e '1d'`
+	do
+		case `echo $line | cut -c43-47 | awk '{print $1}'` in
+			"" ) THERE=1
+		esac
+	done
+	if [ -z "$THERE" ]
+	then
+		COUNT=`expr $COUNT + 1`
+		if [ $COUNT -gt $MAXWAITS ]
+		then
+			MSG="$0 reports failure.  $1 is still inactive"
+		else
+			sleep $SLEEPTIME
+		fi
+	else
+		MSG="$0 reports success.  $1 has an active session."
+	fi
+done
+
+echo $MSG | mail `whoami`"@informatics.jax.org"

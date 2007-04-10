@@ -1,0 +1,52 @@
+#!/usr/bin/sh
+
+TOP_N=25
+
+if [ $# -gt 0 ]; then
+	TOP_N=$1
+fi
+
+TODAY=`date '+%d/%b/%Y'`
+DIR="/mgi/all/logs/www/public/"`date '+%Y/%m'`
+TEMPFILE=/tmp/$$.today
+TEMPFILE_2=${TEMPFILE}.2
+
+cd $DIR
+grep "\[$TODAY" access.log > $TEMPFILE
+
+echo `wc -l $TEMPFILE | awk '{print $1}'`" hits today"
+echo '------------------------------------'
+echo "Top $TOP_N hitters by IP:"
+echo ''
+groupby -f $TEMPFILE -n $TOP_N 1 > $TEMPFILE_2
+cat $TEMPFILE_2
+echo '------------------------------------'
+echo "Top $TOP_N hitters by name:"
+echo ''
+cat $TEMPFILE_2 | while read line
+	do
+		ITEM=0
+		COUNT=0
+		IP="0.0.0.0"
+		for item in $line
+		do
+			if [ $ITEM -eq 0 ]; then
+				ITEM=1
+				COUNT=$item
+			else
+				ITEM=0
+				IP="$item"
+			fi
+		done
+		ADDR=`nslookup $IP -ret=2 2>/dev/null | grep "Name"`
+		if [ -z "$ADDR" ]; then
+			ADDR=$IP
+		else
+			ADDR=`echo $ADDR | awk '{print $2}'`
+		fi
+		echo $COUNT"    "$ADDR
+	done
+echo '------------------------------------'
+
+rm $TEMPFILE
+rm $TEMPFILE_2

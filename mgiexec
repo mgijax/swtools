@@ -1,0 +1,27 @@
+#!/bin/sh
+
+USAGE="Usage: $0 <program to execute> [ <program's options> ]\n\n
+    <program to execute> should include the path to the program\n
+    <program's options>  should appear just as if calling program directly\n
+"
+
+# test to see if no program given
+
+if [ $# -lt 1 ]; then
+	echo $USAGE
+	exit 1
+fi
+
+CWD=`pwd`			# current working directory
+
+FILENAME=`basename $1`		# just the filename
+FILEPATH=`dirname $1`		# just the directory path
+
+shift
+
+cd $FILEPATH
+./$FILENAME "$@"		# invoke program with each parameter quoted
+EXITCODE=$?			# catch the exit code as we'll propagate it
+cd $CWD
+
+exit $EXITCODE

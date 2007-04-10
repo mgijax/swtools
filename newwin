@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ $# -lt 2 ]; then
+	echo "Usage:  $0 <window title> <command to execute>"
+	exit 1
+fi
+
+title=$1
+shift
+xterm -T "$title" -n "$title" -e $* &

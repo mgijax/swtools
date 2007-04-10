@@ -1,0 +1,201 @@
+#!/usr/local/bin/python
+
+# checks one or more HTML files and reports on the various types of links
+# they contain.
+
+import regex	# regular expressions
+import regsub	# substitution for regular expressions
+import string	# string operations
+import sys	# access to command-line arguments
+import glob	# useful if run on a PC; expands wildcards in filenames
+import getopt
+
+USAGE = '''Usage: %s [-q] [filename]...
+	-q : quiet mode - only print absolute MGI URLs
+''' % sys.argv[0]
+
+NORMAL = 0
+QUIET = 1
+
+# regular expression to identify tags which contain URLs
+name_re = regex.compile ('href\|src\|action', regex.casefold)
+
+# regular expression to identify URLs using a full path (absolute URLs)
+full_re = regex.compile ('[a-zA-Z]+://\|mailto:')
+
+ctRelative = 0	# number of relative URLs found
+ctRooted = 0	# number of URLs beginning at the document root found
+ctInclude = 0	# number of URLs from include files found
+ctFull = 0	# number of URLs which use a full path found
+
+def getNamedString (s):
+	i = name_re.search(s)
+	if i == -1:
+		return None
+	t = ''
+	delimiter = None
+	done = 0
+	end = len(s)
+	while not done and i < end:
+		if delimiter:
+			if s[i] == delimiter:
+				done = 1
+			else:
+				t = t + s[i]
+		elif s[i] in ('"', "'"):
+			delimiter = s[i]
+		i = i + 1
+	return t
+
+def readFile (file):
+	sys.stderr.write ('Reading %s...\n' % file)
+	fp = open (file, 'r')
+	lines = fp.readlines()
+	fp.close()
+	return lines
+
+def cleanFile (lines):
+	return regsub.gsub ('[\t\n ]+', ' ', string.join (lines, ' '))
+
+def getTags (s):
+	i = 0
+	end = len(s)
+	unmatched = 0
+	tag = ''
+	tags = []
+	while i < end:
+		if unmatched > 0:
+			tag = tag + s[i]
+		if s[i] == '<':
+			if unmatched == 0:
+				tag = s[i]
+			unmatched = unmatched + 1
+		elif s[i] == '>':
+			if unmatched > 0:
+				unmatched = unmatched - 1
+				if unmatched == 0:
+					tags.append (tag)
+					tag = ''
+		i = i + 1
+	if tag != '':
+		tags.append (tag)
+	return tags
+
+def getUrlsFromFile (file):
+	urls = []
+	tags = getTags (cleanFile (readFile (file)))
+	for tag in tags:
+		url = getNamedString (tag)
+		if url:
+			urls.append (url)
+	return urls
+
+def analyzeUrls (urls):
+	global ctRelative, ctRooted, ctInclude, ctFull
+	relative = []
+	rooted = []
+	include = []
+	full = []
+	for url in urls:
+		if url[0] == '/':
+			rooted.append (url)
+		elif url[:12] == '<!--#include':
+			include.append (url)
+		elif full_re.match (url) != -1:
+			full.append (url)
+		else:
+			relative.append (url)
+	ctRelative = ctRelative + len(relative)
+	ctRooted = ctRooted + len(rooted)
+	ctInclude = ctInclude + len(include)
+	ctFull = ctFull + len(full)
+
+	return relative, rooted, include, full
+
+def justify (d):
+	return string.rjust (str (d), 3)
+
+def printTable (title, rela, root, incl, full, indent):
+	print title
+	ind = ' ' * indent
+	print "%sRelative URLs:     %s" % (ind, justify(rela))
+	print "%sRooted URLs:       %s" % (ind, justify(root))
+	print "%sInclude File URLs: %s" % (ind, justify(incl))
+	print "%sAbsolute URLs:     %s" % (ind, justify(full))
+	return
+
+def printDivider ():
+	print '=' * 70
+	return
+
+def printUrls (file, name, urls):
+	if len(urls) > 0:
+		s = 'File %s, %s URLs (%d):' % (file, name, len(urls))
+		print s
+		print '-' * len(s)
+		for url in urls:
+			print url
+		print
+	return
+
+def main (filenames, mode):
+	fileUrls = []
+	files = []
+	for parm in filenames:
+		files = files + glob.glob (parm)
+
+	for file in files:
+		fileUrls.append (analyzeUrls (getUrlsFromFile (file)))
+
+	if mode == NORMAL:
+		printTable ('All Files Examined:', ctRelative, ctRooted,
+			ctInclude, ctFull, 5)
+		printDivider()
+		for i in range (0, len(files)):
+			rel, roo, inc, ful = fileUrls[i]
+			printTable ('File: %s' % files[i],
+				len(rel), len(roo), len(inc), len(ful), 5)
+			print
+		printDivider()
+
+	for i in range (0, len(files)):
+		rel, roo, inc, ful = fileUrls[i]
+		if mode == NORMAL:
+			for (urls, name) in [ (rel, 'Relative'),
+					(roo, 'Rooted'),
+					(inc, 'Include File'),
+					(ful, 'Absolute') ]:
+				printUrls (files[i], name, urls)
+			printDivider()
+		else:
+			mgi = []
+			for url in ful:
+				if string.find (url,
+						'informatics.jax.org') > -1:
+					mgi.append (url)
+			printUrls (files[i], 'MGI Absolute', mgi)
+	return
+
+if __name__ == '__main__':
+	mode = NORMAL
+	try:
+		optlist, args = getopt.getopt (sys.argv[1:], 'q')
+		for (option, value) in optlist:
+			if option == '-q':
+				mode = QUIET
+	except getopt.opterr:
+		print USAGE
+		sys.exit (1)
+
+	if len(args) > 0:
+		main (args, mode)
+	else:
+		filenames = []
+		line = sys.stdin.readline()
+		while line:
+			filenames.append (string.strip(line))
+			line = sys.stdin.readline()
+		if len(filenames) > 0:
+			main (filenames, mode)
+		else:
+			print USAGE

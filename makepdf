@@ -1,0 +1,10 @@
+#!/bin/sh
+
+SCRIPT=/mgi/software/bin/fmconvert
+
+if [ ! -x $SCRIPT ]; then
+	echo "Cannot find/execute $SCRIPT.  Conversion failed."
+	exit -1
+fi
+
+/mgi/software/bin/fmconvert --pdf $*

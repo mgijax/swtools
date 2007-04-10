@@ -1,0 +1,63 @@
+#!/usr/local/bin/python
+
+# reads from stdin and returns a portion of it to stdout, based on input
+# parameters
+
+import sys
+import string
+
+HEADER = 'lines %d-%d extracted by "%s"'
+SELF = sys.argv[0]
+EOF = -1
+USAGE = '''
+	%s [start line number] [stop line number]
+
+	Read lines from stdin and writes those from [start line number] to
+	[stop line number] to stdout, inclusively.
+
+	If you specify no line numbers, the entire file is written.
+	If you specify only one line number, writing begins at that line and
+	continues through the end of the file.
+''' % SELF
+
+def quit (s):
+	print s
+	sys.exit (-1)
+
+def process_options ():
+	begin = 1
+	end = EOF
+	try:
+		if len(sys.argv) > 1:
+			begin = string.atoi (sys.argv[1])
+		if len(sys.argv) > 2:
+			end = string.atoi (sys.argv[2])
+	except:
+		quit (USAGE)
+	return (begin, end)
+	
+def get_lines (begin, end, fp):
+	lines = []
+	line = fp.readline ()
+	i = 0
+	while line and ((end == EOF) or (i < end)):
+		i = i + 1
+		if i >= begin:
+			lines.append (string.rstrip (line))
+		line = fp.readline ()
+	return lines, i
+
+def main ():
+	begin, end = process_options ()
+	lines, last_num = get_lines (begin, end, sys.stdin)
+
+	head = HEADER % (begin, last_num, SELF)
+	print head
+	print '=' * len(head)
+	print
+	for line in lines:
+		print line
+	return
+
+if __name__ == '__main__':
+	main()

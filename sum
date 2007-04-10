@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# reads integers from stdin and sums them, writing a total
+# or reads integers as command-line parameters and sums them, writing a total
+
+total=0
+if [ $# -eq 0 ]; then
+	while read line
+	do
+		for item in $line
+		do
+			total=`expr $total + $item`
+		done
+	done
+else
+	while [ $# -gt 0 ];
+	do
+		total=`expr $total + $1`
+		shift
+	done
+fi
+echo $total
