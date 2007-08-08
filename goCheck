@@ -1,0 +1,304 @@
+#!/usr/local/bin/python
+
+# Checks to see why a given marker shows up when querying by GO associations.
+# Uses read-only access to the development mirror of the production database.
+
+import sys
+sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+import getopt
+
+#-----------------------------------------------------------------------------
+USAGE = '''Usage: %s [-k <key>][-s <symbol>][-m <id>]
+	[-p][-f][-c]
+	<GO search term or ID>
+
+	One of -k, -s, or -m must be used to specify your desired marker:
+		-k : marker key
+		-s : marker symbol
+		-m : marker MGI ID
+
+	You may use -p, -f, or -c to restrict the search to certain GO
+	ontologies (default is to search all of them):
+		-p : biological process
+		-f : molecular function
+		-c : cellular component
+
+	<GO search term or ID>
+''' % sys.argv[0]
+
+#-----------------------------------------------------------------------------
+# check that we are not running on a workstation without the db module
+
+try:
+	import db
+except:
+	bailout('Cannot find db.py in /usr/local/mgi/live/lib/python')
+
+#-----------------------------------------------------------------------------
+# check that we have a proper sybase interfaces file and can make a valid
+# connection to the database
+
+try:
+	db.set_sqlLogin ('mgd_public', 'mgdpub', 'DEV_MGI', 'mgd')
+	db.useOneConnection(1)
+	db.sql ('SELECT COUNT(1) FROM MGI_dbInfo', 'auto')
+except:
+	bailout ('Cannot query DEV_MGI..mgd database')
+
+#-----------------------------------------------------------------------------
+
+MARKER_KEY = None
+GO_DAGS = None
+GO_TERM = None
+
+#-----------------------------------------------------------------------------
+
+def bailout (s):
+	sys.stderr.write (USAGE + '\n')
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+#-----------------------------------------------------------------------------
+
+def getMarkerKey (key, symbol, id):
+	triedOne = False
+	markerKey = None
+
+	if key:
+		try:
+			markerKey = int(key)
+		except:
+			bailout ('Invalid marker key: %s' % value)
+		triedOne = True
+
+	if symbol:
+		if triedOne:
+			bailout ('You may only use one of -k, -s, and -m')
+		results = db.sql ('''SELECT _Marker_key
+			FROM MRK_Marker
+			WHERE _Organism_key = 1		-- mouse
+				AND symbol = "%s"
+				AND _Marker_Status_key = 1''' % symbol,
+					'auto')
+		if not results:
+			bailout ('Invalid mouse marker symbol: %s' % symbol)
+		markerKey = results[0]['_Marker_key']
+		triedOne = True
+
+	if id:
+		if triedOne:
+			bailout ('You may only use one of -k, -s, and -m')
+		results = db.sql ('''SELECT _Object_key
+			FROM ACC_Accession
+			WHERE _LogicalDB_key = 1	-- MGI
+				AND accID = "%s"
+				AND _MGIType_key = 2	-- markers
+				AND preferred = 1
+				AND private = 0''' % id, 'auto')
+		if not results:
+			bailout ('%s is not a primary ID for a mouse marker' \
+				% id)
+		markerKey = results[0]['_Object_key']
+
+	if not markerKey:
+		# should not happen, but just in case
+		bailout ('No valid mouse marker was specified')
+
+	return markerKey
+
+#-----------------------------------------------------------------------------
+
+def getDags (process, function, component):
+	d = ['Biological Process', 'Molecular Function', 'Cellular Component']
+	if process or function or component:
+		if not process:
+			d.remove ('Biological Process')
+		if not function:
+			d.remove ('Molecular Function')
+		if not component:
+			d.remove ('Cellular Component')
+
+	results = db.sql ('''SELECT _DAG_key
+		FROM DAG_DAG
+		WHERE name IN ("%s")''' % '", "'.join (d), 'auto')
+
+	if not results:
+		# should not happend, but just in case
+		bailout ('No valid GO DAG to search')
+
+	dags = []
+	for row in results:
+		dags.append (row['_DAG_key'])
+
+	return dags
+
+#-----------------------------------------------------------------------------
+
+def parseCommandLine():
+	global MARKER_KEY, GO_DAGS, GO_TERM
+
+	try:
+		opts, args = getopt.getopt (sys.argv[1:], 'k:s:m:pfc')
+	except getopt.GetoptError:
+		bailout ('Invalid command-line options')
+
+	if not args:
+		bailout ('Missing GO search term or ID')
+
+	key = symbol = id = process = function = component = None
+
+	for (option, value) in opts:
+		if option == '-k':
+			key = value
+		elif option == '-s':
+			symbol = value
+		elif option == '-m':
+			id = value
+		elif option == '-p':
+			process = option
+		elif option == '-f':
+			function = option
+		elif option == '-c':
+			component = option
+		else:
+			# should not occur, but just in case...
+			bailout ('Invalid command-line option: %s' % option)
+
+	MARKER_KEY = getMarkerKey (key, symbol, id)
+	GO_DAGS = getDags (process, function, component)
+	GO_TERM = ' '.join(args)
+
+	return
+
+#-----------------------------------------------------------------------------
+
+def searchGO():
+	dags = ','.join (map (str, GO_DAGS))
+
+	cmds = [
+		'''CREATE TABLE #goMatches (
+			_Term_key int not null,
+			term varchar(255) not null,
+			match varchar(255) not null,
+			accid varchar(100) null,
+			_Parent_key int null
+			)''',
+
+		'''INSERT INTO #goMatches
+			SELECT vt._Term_key,
+				vt.term, 
+				"term: " + vt.term,
+				null,
+				null
+			FROM VOC_Term vt, DAG_Node dn
+			WHERE dn._DAG_key IN (%s)
+				AND dn._Object_key = vt._Term_key
+				AND vt.term LIKE "%%%s%%"''' % \
+					(dags, GO_TERM),
+
+		'''INSERT INTO #goMatches
+			SELECT vt._Term_key,
+				vt.term,
+				"synonym: " + ms.synonym,
+				null,
+				null
+			FROM MGI_Synonym ms,
+				VOC_Term vt,
+				DAG_Node dn
+			WHERE dn._DAG_key IN (%s)
+				AND dn._Object_key = vt._Term_key
+				AND vt._Term_key = ms._Object_key
+				AND ms._MGIType_key = 13	-- vocab term
+				AND ms.synonym LIKE "%%%s%%"
+				AND dn._Object_key NOT IN (
+					SELECT _Term_key FROM #goMatches)''' \
+						% (dags, GO_TERM),
+		'''INSERT INTO #goMatches
+			SELECT vt._Term_key,
+				vt.term,
+				"id: " + ac.accID,
+				ac.accID,
+				null
+			FROM ACC_Accession ac,
+				VOC_Term vt,
+				DAG_Node dn
+			WHERE dn._DAG_key IN (%s)
+				AND dn._Object_key = vt._Term_key
+				AND vt._Term_key = ac._Object_key
+				AND ac._MGIType_key = 13	-- vocab term
+				AND ac.accID = "%s"
+				AND dn._Object_key NOT IN (
+					SELECT _Term_key FROM #goMatches)''' \
+						% (dags, GO_TERM),
+		'''UPDATE #goMatches
+			SET accID = ac.accID
+			FROM #goMatches gom,
+				ACC_Accession ac
+			WHERE gom._Term_key = ac._Object_key
+				AND ac._MGIType_key = 13	-- vocab term
+				AND ac.preferred = 1
+				AND ac.private = 0''',
+
+		'''UPDATE #goMatches
+			SET _Parent_key = dc._AncestorObject_key
+			FROM #goMatches gom,
+				DAG_Closure dc,
+				VOC_Annot va
+			WHERE gom._Term_key = dc._DescendentObject_key
+				AND dc._DAG_key IN (%s)
+				AND dc._AncestorObject_key = va._Term_key
+				AND va._Object_key = %s''' % \
+					(dags, MARKER_KEY),
+
+		'''DELETE FROM #goMatches
+			WHERE _Parent_key = null
+				AND _Term_key NOT IN (SELECT _Term_key
+					FROM VOC_Annot va,
+						DAG_Node dn
+					WHERE va._Term_key = dn._Object_key
+						AND dn._DAG_key IN (%s)
+						AND va._Object_key = %s)''' % \
+							(dags, MARKER_KEY),
+
+		'''SELECT ac.accID AS parentID,
+			vt.term AS parentTerm,
+			gom.accID,
+			gom.match,
+			gom.term
+		FROM #goMatches gom,
+			ACC_Accession ac,
+			VOC_Term vt
+		WHERE gom._Parent_key *= vt._Term_key
+			AND gom._Parent_key *= ac._Object_key
+			AND ac._MGIType_key = 13		-- vocab term
+			AND ac.preferred = 1
+			AND ac.private = 0''',
+		]
+
+	results = db.sql (cmds, 'auto')
+
+	return results[-1]
+
+#-----------------------------------------------------------------------------
+
+def printResults (results):
+	for row in results:
+		if row['parentID']:
+			print 'Annotated to: %s : %s' % \
+				(row['parentID'], row['parentTerm'])
+			print '\tdescendent: %s : %s' % \
+				(row['accID'], row['term'])
+			print '\tmatch by (%s)' % row['match']
+		else:
+			print 'Annotated to: %s : %s' % \
+				(row['accID'], row['term'])
+			print '\tmatch by (%s)' % row['match']
+		print
+	return
+
+#-----------------------------------------------------------------------------
+
+if __name__ == '__main__':
+	parseCommandLine()
+	results = searchGO()
+	printResults(results)

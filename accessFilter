@@ -1,0 +1,160 @@
+#!/usr/local/bin/python
+
+# is: a filter through which Apache access.log records can be piped to filter
+# 	out various categories of records (sending others out to stdout)
+
+import sys
+import getopt
+
+USAGE = '''Usage: %s [-r|-s|-i|-m] [-f <filename>] [-o <filename>]
+	Serves as a filter for Apache access logs.  Can be used to strip out
+	various types of requests, based on command-line flags.
+
+	-r : exclude hits from robots
+	-s : exclude hits from Perl/Python/Java/etc. scripts
+	-i : exclude requests for JPG or GIF images
+	-m : exclude hits from MGI machines
+
+	-v : reverse processing (include only those specified, not exclude)
+
+	-f : specify an input file from which to read (default is stdin)
+	-o : specify an output file to which to write (default is stdout)
+''' % sys.argv[0]
+
+INFILE = sys.stdin
+OUTFILE = sys.stdout
+
+ROBOTS = False		# boolean flags for which records to exclude
+SCRIPTS = False
+IMAGES = False
+MGI = False
+
+REVERSE = False
+
+ROBOT_TAGS = [ 'bot', 'jeeves', 'inktomi', 'crawl', 'webcapture', 'webcopier']
+SCRIPT_TAGS = [ 'python', 'perl', 'java', 'mfc' ]
+
+def bailout (s):
+	sys.stderr.write (USAGE + '\n')
+	if s:
+		sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def processCommandLine():
+	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE
+
+	try:
+		options, args = getopt.getopt (sys.argv[1:], 'rsimvf:o:')
+	except getopt.GetoptError:
+		bailout ('Invalid command-line flag(s)')
+
+	if len(args) > 0:
+		bailout ('No extra arguments are allowed')
+
+	for (option, value) in options:
+		if option == '-r':
+			ROBOTS = True
+		elif option == '-s':
+			SCRIPTS = True
+		elif option == '-i':
+			IMAGES = True
+		elif option == '-m':
+			MGI = True
+		elif option == '-v':
+			REVERSE = True
+		elif option == '-f':
+			try:
+				INFILE = open (value, 'r')
+			except:
+				bailout ('Cannot read from: %s' % value)
+		elif option == '-o':
+			try:
+				OUTFILE = open (value, 'w')
+			except:
+				bailout ('Cannot write to: %s' % value)
+
+	if not (ROBOTS or SCRIPTS or MGI or IMAGES):
+		bailout ('Must specify at least one of -r, -s, -i, and -m')
+	return
+
+def closeFiles():
+	global OUTFILE, INFILE
+
+	if OUTFILE != sys.stdout:
+		OUTFILE.close()
+	if INFILE != sys.stdin:
+		INFILE.close()
+	return
+
+def isMgi (ip):
+	if ip.startswith('209.222.209'):
+	    	return True
+	if ip.endswith('informatics.jax.org'):
+		return True
+	return False
+
+def isImage (uriLower):
+	for suffix in [ '.gif', '.jpg', '.jpeg', '.ico' ]:
+		if uriLower.endswith(suffix):
+			return True
+
+	if uriLower.find ('string_image.cgi') != -1:
+		return True
+
+	return False
+
+
+def isRobot (agentLower):
+	for tag in ROBOT_TAGS:
+		if agentLower.find (tag) != -1:
+			return True
+	return False
+
+def isScript (agentLower):
+	for tag in SCRIPT_TAGS:
+		if agentLower.find (tag) != -1:
+			return True
+	return False
+
+def filter():
+	global INFILE, OUTFILE
+
+	line = INFILE.readline()
+	while line:
+		output = True
+
+		fields = line.strip().split(' ')
+		numFields = len(fields)
+
+		if ROBOTS or SCRIPTS:
+			if numFields >= 12:
+				agent = fields[11].lower()
+				if ROBOTS and isRobot(agent):
+					output = False
+				elif SCRIPTS and isScript(agent):
+					output = False
+
+		if output and MGI:
+			if numFields >= 1:
+				if isMgi(fields[0]):
+					output = False
+		if output and IMAGES:
+			if numFields >= 7:
+				if isImage(fields[6].lower()):
+					output = False
+		if REVERSE:
+			output = not output
+
+		if output:
+			OUTFILE.write(line)
+
+		line = INFILE.readline()
+	return
+
+def main():
+	processCommandLine()
+	filter()
+	closeFiles()
+
+if __name__ == '__main__':
+	main()
