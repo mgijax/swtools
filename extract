@@ -1,0 +1,354 @@
+#!/usr/local/bin/python
+
+# Program: extract
+# Purpose: This program allows one to easily extract subsets from a large file
+#	of lines containing counts.  It allows you to extract a random subset
+#	of the lines in any text file.  And, it allows you to see an overview
+#	of how many lines contained each particular count.  See the Usage
+#	statement for more details.
+# Author: Jon Beal
+# Overview: To minimize memory requirements, this script operates on a single
+#	line at a time and we only store the minimum amount of information
+#	necessary to do the task at hand:
+#	1. For -r, -l, -g, and -e, we do not store any lines long-term.
+#	2. For -b and -s, we store only the number of lines we have been asked
+#		to report.
+#	3. For -v and -w, we store only the counts rather than the lines
+#		themselves.
+
+import sys	# for command-line parms, exception handling, access to std*
+import getopt	# for command-line parsing
+import os	# for dealing with files and paths
+import random	# for pseudo-random number generation
+
+###-----------------------###
+###--- Usage statement ---###
+###-----------------------###
+
+USAGE = '''Usage: %s [options]
+	This program is useful for extracting a subset of lines from a large
+	file using a variety of criteria.  At its heart, it assumes that one
+	column in each line is an integer, and it lets you select lines based
+	on the value of that integer.  Using the random (-r) setting, this
+	integer column is ignored and we simply select a pseudo-random subset
+	of all lines.  (We will refer to this integer column as the 'count'
+	below.)  As well, it also offers two options (-v and -w) for finding
+	a summary of the counts and how often each appears in the file.
+    Options:
+	-r <percent> : extract a pseudo-[r]andom sample consisting of a given
+		integer percentage of the file (approximately)
+	-l <max count> : extract all lines with a count [l]ess than or equal
+		to the maximum count given
+	-g <min count> : extract all lines with a count [g]reater than or
+		equal to the minimum count given
+	-e <count> : extract all lines with a count [e]qual to the one given
+	-b <number> : extract a given 'number' of lines with the [b]iggest
+		counts
+	-s <number> : extract a given 'number' of lines with the [s]mallest
+		counts
+	-v : give an o[v]erview by showing how many lines have each count,
+		sorted by the counts.  On each line, the first number will be
+		the count found in the line, and the second number will be the
+		number of lines that contained that count.
+	-w : like -v, but sort by how many have each count instead
+	-i <file> : use specified file as an [i]nput file (default stdin)
+	-o <file> : use specified file as an [o]utput file (default stdout)
+	-c <column number> : look for counts in the given [c]olumn, with
+		numbering starting at 1 on the left and columns separated by
+		spaces (default is 1)
+    Notes:
+    	1. You must use exactly one of -r, -l, -g, -e, -b, -s, -v, or -w to
+	identify what you are seeking for output.
+	2. This script is suitable for use as a command-line filter since its
+	default input is stdin and its default output is stdout.
+	3. Lines without an integer number in the specified column will be
+	ignored (not sent to the output file) -- except in random (-r) mode.
+''' % sys.argv[0]
+
+###------------------------###
+###--- global variables ---###
+###------------------------###
+
+IN_FP = sys.stdin		# input file descriptor
+OUT_FP = sys.stdout		# output file descriptor
+INT_PARAM = None		# value of the integer parameter
+COUNT_COLUMN = 0		# column containing the count (0 is leftmost)
+
+# function used to see if a given line should be selected for output; this is
+# a pointer to the actual function to be used, which will correspond to the
+# user's choice of operation (see #1 in the Usage statement Notes)
+IS_SELECTED_LINE = None	
+
+QUEUE = []	# collects ordered elements for -b and -s
+COUNTS = {} 	# collects counts for -v and -w
+
+###--- functions ---###
+
+def bailout (s):
+	# give an error message and exit
+
+	sys.stderr.write (USAGE + '\n')
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def convertInt (s):
+	# convert string s to an integer, or give an error if not possible
+
+	try:
+		return int(s)
+	except:
+		bailout ('Invalid integer: %s' % s)
+
+def extractColumn (s):
+	# pull an integer out of the desired column of line 's'
+
+	columns = s.split (' ')
+	if len(columns) > COUNT_COLUMN:
+		try:
+			return int(columns[COUNT_COLUMN])
+		except:
+			return None
+	return None
+
+def isRandom (s):
+	# write out line 's' if it meets a random percentage criteria
+
+	global OUT_FP
+	if random.randint(1,100) <= INT_PARAM:
+		OUT_FP.write (s)
+	return
+
+def isLessOrEqual (s):
+	# write out line 's' if its count is less than or equal to a given int
+
+	global OUT_FP
+	myVal = extractColumn(s)
+	if (myVal != None) and (myVal <= INT_PARAM):
+		OUT_FP.write(s)
+	return
+
+def isGreaterOrEqual (s):
+	# write out line 's' if its count is greater than or equal to a
+	# given int
+
+	global OUT_FP
+	myVal = extractColumn(s)
+	if (myVal != None) and (myVal >= INT_PARAM):
+		OUT_FP.write(s)
+	return
+
+def isEqual (s):
+	# write out line 's' if its count is equal to a given int
+
+	global OUT_FP
+	myVal = extractColumn(s)
+	if (myVal != None) and (myVal == INT_PARAM):
+		OUT_FP.write(s)
+	return
+
+def isHighest (s):
+	# remember line 's' if its count is one of the highest seen so far
+
+	global QUEUE
+
+	myVal = extractColumn(s)
+
+	# queue is ordered lowest to highest; if 'myVal' is higher than the
+	# lowest element in the queue (or if the queue is not full), then we
+	# should add it and (if full) remove the lowest element
+
+	if myVal == None:
+		return
+	elif len(QUEUE) < INT_PARAM:
+		QUEUE.append ((myVal, s))
+		QUEUE.sort()
+	elif myVal > QUEUE[0][0]:
+		del QUEUE[0]
+		QUEUE.append ((myVal, s))
+		QUEUE.sort()
+	return
+
+def isLowest (s):
+	# remember line 's' if its count is one of the lowest seen so far
+
+	global QUEUE
+
+	myVal = extractColumn(s)
+
+	# queue is ordered lowest to highest; if 'myVal' is lower than the
+	# highest element in the queue (or if the queue is not full), then we
+	# should add it and (if full) remove the highest element
+
+	if myVal == None:
+		return
+	elif len(QUEUE) < INT_PARAM:
+		QUEUE.append ((myVal, s))
+		QUEUE.sort()
+	elif myVal < QUEUE[-1][0]:
+		del QUEUE[-1]
+		QUEUE.append ((myVal, s))
+		QUEUE.sort()
+	return
+
+def summarize (s):
+	# extract the count from 's' and note that we have seen this count
+	# another time
+
+	global COUNTS
+
+	myVal = extractColumn(s)
+	if (myVal != None):
+		if COUNTS.has_key(myVal):
+			COUNTS[myVal] = COUNTS[myVal] + 1
+		else:
+			COUNTS[myVal] = 1
+	return
+
+def summarizeAlternate (s):
+	# extract the count from 's' and note that we have seen this count
+	# another time
+
+	summarize(s)
+	return
+
+def handleParameters():
+	# process the command-line parameters and initialize global variables
+
+	global IN_FP, OUT_FP, INT_PARAM, COUNT_COLUMN, IS_SELECTED_LINE
+
+	try:
+		(options, args) = getopt.getopt (sys.argv[1:],
+					'r:l:g:e:b:s:i:o:c:vw')
+	except getopt.GetoptError:
+		bailout ('Invalid command-line options')
+
+	if len(args) > 0:
+		bailout ('Invalid command-line options')
+
+	selectCount = 0		# count of restricted options found
+
+	for (option, value) in options:
+		if option == '-r':
+			IS_SELECTED_LINE = isRandom
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+			random.seed()
+
+		elif option == '-l':
+			IS_SELECTED_LINE = isLessOrEqual
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+
+		elif option == '-g':
+			IS_SELECTED_LINE = isGreaterOrEqual
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+
+		elif option == '-e':
+			IS_SELECTED_LINE = isEqual
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+
+		elif option == '-b':
+			IS_SELECTED_LINE = isHighest
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+
+		elif option == '-s':
+			IS_SELECTED_LINE = isLowest
+			INT_PARAM = convertInt(value)
+			selectCount = selectCount + 1
+
+		elif option == '-v':
+			selectCount = selectCount + 1
+			IS_SELECTED_LINE = summarize
+
+		elif option == '-w':
+			selectCount = selectCount + 1
+			IS_SELECTED_LINE = summarizeAlternate
+
+		elif option == '-i':
+			if not os.path.exists (value):
+				bailout ('Unknown input file: %s' % value)
+			try:
+				IN_FP = open (value, 'r')
+			except:
+				bailout ('Cannot read: %s' % value)
+
+		elif option == '-o':
+			try:
+				OUT_FP = open (value, 'w')
+			except:
+				bailout ('Cannot write: %s' % value)
+
+		elif option == '-c':
+			COUNT_COLUMN = convertInt(value) - 1
+
+		else:
+			bailout ('Invalid option: %s' % option)
+
+	# We must have exactly one of the restricted options specified.
+
+	if selectCount > 1:
+		bailout ('Too many options specified')
+	elif selectCount < 1:
+		bailout ('Too few options selected')
+	return
+
+def main():
+	# main processing loop
+
+	global IN_FP, OUT_FP, QUEUE
+
+	# read the file and process a line at a time
+
+	line = IN_FP.readline()
+	while line:
+		IS_SELECTED_LINE(line)
+		line = IN_FP.readline()
+
+	# do any special reporting -- either extracting info from the QUEUE
+	# or from the collected COUNTS
+
+	if IS_SELECTED_LINE in (isLowest, isHighest):
+		if IS_SELECTED_LINE == isHighest:
+			QUEUE.reverse()
+		for (count, line) in QUEUE:
+			OUT_FP.write (line)
+
+	elif IS_SELECTED_LINE in (summarize, summarizeAlternate):
+		for (count, howMany) in COUNTS.items():
+			if IS_SELECTED_LINE == summarize:
+				QUEUE.append ( (count, (count, howMany)) )
+			else:
+				QUEUE.append ( (howMany, (count, howMany)) )
+		QUEUE.sort()
+
+		for (sortValue, (count, howMany)) in QUEUE:
+			OUT_FP.write ('%d %d\n' % (count, howMany))
+
+	# clean up any open file descriptors (other than the standard ones)
+
+	if OUT_FP != sys.stdout:
+		OUT_FP.close()
+	if IN_FP != sys.stdin:
+		IN_FP.close()
+	return
+
+###--------------------###
+###--- main program ---###
+###--------------------###
+
+if __name__ == '__main__':
+	handleParameters()
+	try:
+		main()
+	except:
+                # if an exception occurs, clean up after ourselves, and return
+                # with an error message.
+
+                myExc, myVal = sys.exc_info()[:2]
+
+                sys.stderr.write ('Exiting prematurely...\n')
+                sys.stderr.write ('   Exception: %s\n' % myExc)
+                sys.stderr.write ('   Value:     %s\n' % str(myVal))
