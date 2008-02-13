@@ -1,0 +1,91 @@
+#!/usr/local/bin/python
+
+PURPOSE = '''
+	Purpose: Reads text and un-quotes any HTML-coded characters (special
+	characters that were converted to their hex equivalents (eg- ' ' was
+	converted to '%20'), so they are converted back to their original
+	values.  Optionally, the plus character can be converted to a space
+	as well.  (A space in a URL is often encoded as plus.)
+'''
+
+import sys
+import os
+import urllib
+import getopt
+
+USAGE = '''Usage: %s [-p] [-i <input file>] [-o <output file>]
+	-p : also convert plus characters to spaces
+	-i : specify input file (reading from stdin is the default)
+	-o : specify new output file (writing to stdout is the default)
+%s
+''' % (sys.argv[0], PURPOSE)
+
+###--- globals ---###
+
+UNQUOTE = urllib.unquote	# function to call for unquoting a string
+IN_FP = sys.stdin
+OUT_FP = sys.stdout
+
+###--- functions ---###
+
+def bailout (s, printUsage = True):
+	if printUsage:
+		sys.stderr.write (USAGE + '\n')
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def processCommandLine ():
+	global UNQUOTE, IN_FP, OUT_FP
+
+	try:
+		options, args = getopt.getopt (sys.argv[1:], 'pi:o:')
+	except:
+		bailout ('Invalid command-line arguments')
+	
+	if len(args) > 0:
+		bailout ('Too many command-line arguments')
+
+	for (option, value) in options:
+		if option == '-p':
+			UNQUOTE = urllib.unquote_plus
+		elif option == '-i':
+			if not os.path.exists (value):
+				bailout ('Input file (%s) does not exist' % \
+					value)
+			try:
+				IN_FP = open (value, 'r')
+			except:
+				bailout ('Cannot open %s for reading' % value)
+		elif option == '-o':
+			if os.path.exists (value):
+				bailout ('Output file (%s) already exists' % \
+					value)
+			try:
+				OUT_FP = open (value, 'w')
+			except:
+				bailout ('Cannot open %s for writing' % value)
+		else:
+			bailout ('Unknown option: %s' % option)
+	return
+
+def processFile ():
+	line = IN_FP.readline()
+	while line:
+		OUT_FP.write (UNQUOTE (line))
+		line = IN_FP.readline()
+	return
+
+def main():
+	global IN_FP, OUT_FP
+
+	processCommandLine()
+	processFile()
+
+	if IN_FP != sys.stdin:
+		IN_FP.close()
+	if OUT_FP != sys.stdout:
+		OUT_FP.close()
+	return
+
+if __name__ == '__main__':
+	main()

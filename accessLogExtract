@@ -1,0 +1,229 @@
+#!/usr/local/bin/python
+
+PURPOSE = '''
+    Purpose: to extract certain fields from an Apache access.log file
+'''
+
+import sys
+import getopt
+import os
+
+USAGE = '''Usage: %s [-i][-d][-t][-m][-u][-p][-v][-s][-r][-a][-x][-P <param name>]
+    Extract the following fields in a tab-delimited format:
+	-i : IP address of machine making the request
+	-d : date (as yyyy/mm/dd)
+	-t : time (as hh:mm:ss)
+	-m : request method (GET / POST / etc)
+	-u : URI (the path of the requested item)
+	-p : parameters (which were encoded as part of a GET request)
+	-v : request version (HTTP/1.0 / HTTP/1.1 / etc)
+	-s : status code
+	-r : referring page
+	-a : user-agent information (browser / OS / etc)
+	-x : exclude lines which do not have a value for parameter named in -P
+	-P : value of parameter with specified name (outputs '-' if no value)
+    The order of the fields in the output will match the order of the flags
+    as you specify them on the command-line.  Input is from stdin, and output
+    is to stdout.
+%s
+''' % (sys.argv[0], PURPOSE)
+
+###--- globals ---###
+
+IP = 1
+DATE = 2
+TIME = 3
+METHOD = 4
+URI = 5
+PARMS = 6
+VERSION = 7
+STATUS = 8
+REFERER = 9
+AGENT = 10
+PARMVALUE = 11
+PARMNAME = None		# name of parameter whose value was requested
+PARMNAMEEQUALS = None
+
+FIELDS = []
+
+NEED_AGENT = False
+NEED_REFERER = False
+NEED_PARMS = False
+NEED_URI = False
+NEED_DATE = False
+NEED_TIME = False
+
+EXCLUDE = False
+
+###--- functions ---###
+
+def bailout (s, printUsage = True):
+	if printUsage:
+		sys.stderr.write ('%s\n' % USAGE)
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def badline (s):
+	sys.stderr.write ('Bad line: %s' % s)
+	return
+
+def processCommandLine():
+	global FIELDS, PARMNAME, NEED_AGENT, NEED_REFERER, NEED_PARMS
+	global NEED_URI, NEED_DATE, NEED_TIME, PARMNAMEEQUALS, EXCLUDE
+
+	try:
+		options, args = getopt.getopt (sys.argv[1:], 'idtmupvsraxP:')
+	except:
+		bailout ('Invalid command-line flags')
+
+	if args and (len(args) > 0):
+		bailout ('Only specified flags are allowed on command-line')
+
+	for (option, value) in options:
+		if option == '-i':
+			FIELDS.append (IP)
+		elif option == '-d':
+			FIELDS.append (DATE)
+			NEED_DATE = True
+		elif option == '-t':
+			FIELDS.append (TIME)
+			NEED_TIME = True
+		elif option == '-m':
+			FIELDS.append (METHOD)
+		elif option == '-u':
+			FIELDS.append (URI)
+			NEED_URI = True
+		elif option == '-p':
+			FIELDS.append (PARMS)
+			NEED_PARMS = True
+		elif option == '-v':
+			FIELDS.append (VERSION)
+		elif option == '-s':
+			FIELDS.append (STATUS)
+		elif option == '-r':
+			FIELDS.append (REFERER)
+			NEED_REFERER = True
+		elif option == '-a':
+			FIELDS.append (AGENT)
+			NEED_AGENT = True
+		elif option == '-P':
+			FIELDS.append (PARMVALUE)
+			PARMNAME = value
+			PARMNAMEEQUALS = PARMNAME + '='
+			NEED_PARMS = True
+		elif option == '-x':
+			EXCLUDE = True
+		else:
+			bailout ('Unrecognized option: %s' % option)
+	if len(FIELDS) == 0:
+		bailout ('Must specify at least one field to be output')
+	return
+
+months = {
+	'Jan' : '01',	'Feb' : '02',	'Mar' : '03',	'Apr' : '04',
+	'May' : '05',	'Jun' : '06',	'Jul' : '07',	'Aug' : '08',
+	'Sep' : '09',	'Oct' : '10',	'Nov' : '11',	'Dec' : '12',
+	}
+
+def processLine (line):
+	items = line.split (' ')
+
+	if len(items) < 9:
+		badline(line)
+		return
+
+	agent = '-'
+	referer = '-'
+	uri = '-'
+	parms = '-'
+	parmvalue = '-'
+	time = '-'
+	date = '-'
+
+	if (NEED_AGENT or NEED_REFERER) and (len(items) >= 11):
+		s = ' '.join (items[10:-1])
+		t = s.split ('" "')
+		if len(t) == 2:
+			referer = t[0][1:]
+			agent = t[1][:-1]
+
+	if NEED_DATE or NEED_TIME:
+		dt = items[3][1:].split (':')
+		if len(dt) != 4:
+			badline(line)
+			return
+		time = '%s:%s:%s' % (dt[1], dt[2], dt[3])
+
+		d = dt[0].split('/')
+		if len(d) != 3:
+			badline(line)
+			return
+
+		if not months.has_key (d[1]):
+			badline(line)
+
+		date = '%s/%s/%s' % (d[2], months[d[1]], d[0])
+
+	if NEED_PARMS or NEED_URI:
+		s = items[6].split ('?')
+		if len(s) >= 1:
+			uri = s[0]
+			if len(s) > 1:
+				parms = '?'.join (s[1:])
+
+				if PARMNAME != None:
+				    t = parms.split ('&')
+				    for v in t:
+					if v.startswith (PARMNAMEEQUALS):
+					    u = v.split('=')
+					    if len(u) > 1:
+						parmvalue = '='.join (u[1:])
+					    break
+
+	output = []
+	for field in FIELDS:
+		if field == IP:
+			output.append (items[0])
+		elif field == DATE:
+			output.append (date)
+		elif field == TIME:
+			output.append (time)
+		elif field == METHOD:
+			output.append (items[5][1:])
+		elif field == URI:
+			output.append (uri)
+		elif field == PARMS:
+			output.append (parms)
+		elif field == VERSION:
+			output.append (items[7][:-1])
+		elif field == STATUS:
+			output.append (items[8])
+		elif field == REFERER:
+			output.append (referer)
+		elif field == AGENT:
+			output.append (agent)
+		elif field == PARMVALUE:
+			if EXCLUDE and (parmvalue == '-'):
+				return
+			output.append (parmvalue)
+
+	output2 = []
+	for s in output:
+		output2.append (s.replace ('\t', ' '))
+	print '\t'.join (output2)
+	return
+
+def main():
+	processCommandLine()
+
+	line = sys.stdin.readline()
+	while line:
+		processLine (line)
+		line = sys.stdin.readline()
+	return
+
+###--- main ---###
+
+if __name__ == '__main__':
+	main()
+
