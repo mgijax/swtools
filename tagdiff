@@ -1,0 +1,35 @@
+#!/bin/sh
+
+#
+# This script will compare two version of a CVS product to identify the
+# differences.  It takes two product tags as arguments and displays a list
+# of files that changed between the two versions.
+#
+# Example Usage:  tagdiff  mgihome-4-3-2-1  mgihome-4-3-2-2
+#
+
+if [ $# -ne 2 ]
+then
+    echo "Usage:  $0 tag1 tag2"
+    exit 1
+fi
+
+# Save the product tags.
+#
+TAG1=$1
+TAG2=$2
+
+# Strip the product name from the tag.  Assumes "product-tag" format.
+#
+PRODUCT=`echo ${TAG1} | cut -d'-' -f1`
+
+# Use "cvs rdiff" to find the differences between the tags.  Discard the
+# stderr messages and pull the file list from the second field of the
+# output.  The files in this list include the path from the CVS root, so
+# strip off everything up to the product name.
+#
+# For example:
+#     Convert  mgi/applications/mgihome/HISTORY
+#     To       mgihome/HISTORY
+#
+cvs rdiff -s -r ${TAG1} -r ${TAG2} ${PRODUCT} 2>/dev/null | cut -d' ' -f2 | sed "s/.*\/${PRODUCT}/REPLACE_TO_HERE${PRODUCT}/1" | sed 's/.*REPLACE_TO_HERE//'
