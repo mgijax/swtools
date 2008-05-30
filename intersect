@@ -1,0 +1,74 @@
+#!/usr/local/bin/python
+
+# Purpose: to do an intersection of lines in multiple files.  That is, output
+#	only lines which appear in all specified files.  Useful for things
+#	like getting a list of IP addresses which appear in each of several
+#	months, something like...
+#		cd /logs/www/public/2008/
+#		cat 01/access.log | awk '{print $1}' > jan.ips
+#		cat 02/access.log | awk '{print $1}' > feb.ips
+#		cat 03/access.log | awk '{print $1}' > mar.ips
+#		intersect jan.ips feb.ips mar.ips > allThreeMonths.ips
+#	Or, if you need them sorted, run it through the unix 'sort' command:
+#		intersect jan.ips feb.ips mar.ips | sort > allThreeMonths.ips
+# Author: jsb
+
+import sys
+import string
+
+USAGE = '''Usage: %s <file 1> <file 2> [<file n>]
+	Specify two or more filenames on the command-line.  Writes to stdout
+	a unique set of the lines which appear in each of specified files.
+	Order of output lines is not guaranteed.
+''' % sys.argv[0]
+
+def bailout (s, showUsage = False):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def readfile (path):
+	try:
+		fp = open(path, 'r')
+		lines = map (string.rstrip, fp.readlines())
+		fp.close()
+	except:
+		bailout ('Cannot read: %s' % path)
+	return lines
+
+def toDict (lines):
+	d = {}
+	for line in lines:
+		d[line] = 1
+	return d
+
+def main():
+	if len(sys.argv) < 3:
+		bailout ('Must specify two or more files', True)
+
+	files = []
+	for file in sys.argv[1:]:
+		dict = toDict (readfile (file))
+		files.append ( (len(dict), dict) )
+
+	# we sort the files by length, so we start with the smallest first
+
+	files.sort()
+
+	remnant = files[0][1]		# lines remaining in set to be output
+
+	# for each file larger than the first, look for each line of the
+	# 'remnant' to see if it appears.  if not, remove it from the
+	# 'remnant' of remaining lines
+
+	for (length, file) in files[1:]:
+		for line in remnant.keys():
+			if not file.has_key(line):
+				del remnant[line]
+
+	for line in remnant.keys():
+		print line
+
+if __name__ == '__main__':
+	main()
