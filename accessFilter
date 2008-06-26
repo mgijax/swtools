@@ -5,20 +5,33 @@
 
 import sys
 import getopt
+import re
 
-USAGE = '''Usage: %s [-r|-s|-i|-m] [-f <filename>] [-o <filename>]
+USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o <filename>]
 	Serves as a filter for Apache access logs.  Can be used to strip out
 	various types of requests, based on command-line flags.
 
+    Filtering options:
 	-r : exclude hits from robots
 	-s : exclude hits from Perl/Python/Java/etc. scripts
 	-i : exclude requests for JPG or GIF images
 	-m : exclude hits from MGI machines
-
+	-g : exclude hits for GXD pages (often would use this with -v)
 	-v : reverse processing (include only those specified, not exclude)
-
+	-b : exclude hits before a given date (mm/dd/yyyy format)
+	-a : exclude hits after a given date (mm/dd/yyyy format)
+    File-handling options:
 	-f : specify an input file from which to read (default is stdin)
 	-o : specify an output file to which to write (default is stdout)
+    Notes:
+    	1. You must use at least one of -r, -s, -i, -m, -g, -b, and -a.
+	2. The -a and -b options do not exclude hits from the specified date.
+	3. If you use -a and -b with the same date, you will include only the
+	   hits from that specific date.
+	4. The -v option will include only those records which would have
+	   otherwise been excluded by one or more of the specified criteria.
+	   (You will get the set of all those which would be excluded without
+	   the -v option.)
 ''' % sys.argv[0]
 
 INFILE = sys.stdin
@@ -28,11 +41,22 @@ ROBOTS = False		# boolean flags for which records to exclude
 SCRIPTS = False
 IMAGES = False
 MGI = False
+GXD = False
+
+AFTER_DATE = None
+BEFORE_DATE = None
 
 REVERSE = False
 
-ROBOT_TAGS = [ 'bot', 'jeeves', 'inktomi', 'crawl', 'webcapture', 'webcopier']
+ROBOT_TAGS = [ 'bot', 'jeeves', 'inktomi', 'crawl', 'webcapture', 'webcopier',
+	'slurp', ]
 SCRIPT_TAGS = [ 'python', 'perl', 'java', 'mfc' ]
+
+# mm/dd/yyyy dates from user
+USER_RE = re.compile ('([0-9]{2})/([0-9]{2})/([0-9]{4})')
+
+# dd/mmm/yyyy dates from log entries
+LOG_RE = re.compile ('([0-9]{2})/([A-Z][a-z]{2})/([0-9]{4})')
 
 def bailout (s):
 	sys.stderr.write (USAGE + '\n')
@@ -40,11 +64,56 @@ def bailout (s):
 		sys.stderr.write ('Error: %s\n' % s)
 	sys.exit(1)
 
+abbrevToStr = {
+	'Jan' : '01',
+	'Feb' : '02',
+	'Mar' : '03',
+	'Apr' : '04',
+	'May' : '05',
+	'Jun' : '06',
+	'Jul' : '07',
+	'Aug' : '08',
+	'Sep' : '09',
+	'Oct' : '10',
+	'Nov' : '11',
+	'Dec' : '12',
+	}
+
+def logDate (s):
+	global LOG_RE
+
+	match = LOG_RE.search (s)
+	if not match:
+		bailout ('Invalid dd/mmm/yyyy date string: %s' % s)
+
+	year = match.group(3)
+	month = match.group(2)
+	day = match.group(1)
+
+	if not abbrevToStr.has_key(month):
+		bailout ('Invalid month (%s) in date string: %s' % (month, s))
+
+	return year + abbrevToStr[month] + day
+
+def userDate (s):
+	global USER_RE
+
+	match = USER_RE.search (s)
+	if not match:
+		bailout ('Invalid mm/dd/yyyy date string: %s' % s)
+
+	year = match.group(3)
+	month = match.group(1)
+	day = match.group(2)
+
+	return year + month + day
+
 def processCommandLine():
-	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE
+	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
+	global AFTER_DATE, BEFORE_DATE
 
 	try:
-		options, args = getopt.getopt (sys.argv[1:], 'rsimvf:o:')
+		options, args = getopt.getopt (sys.argv[1:], 'rsimgvf:o:a:b:')
 	except getopt.GetoptError:
 		bailout ('Invalid command-line flag(s)')
 
@@ -72,9 +141,16 @@ def processCommandLine():
 				OUTFILE = open (value, 'w')
 			except:
 				bailout ('Cannot write to: %s' % value)
+		elif option == '-a':
+			AFTER_DATE = userDate (value)
+		elif option == '-b':
+			BEFORE_DATE = userDate (value)
+		elif option == '-g':
+			GXD = True
 
-	if not (ROBOTS or SCRIPTS or MGI or IMAGES):
-		bailout ('Must specify at least one of -r, -s, -i, and -m')
+	if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
+			BEFORE_DATE or AFTER_DATE):
+		bailout ('Must use at least one of -r, -s, -i, -m, -g, -a, or -b')
 	return
 
 def closeFiles():
@@ -103,7 +179,6 @@ def isImage (uriLower):
 
 	return False
 
-
 def isRobot (agentLower):
 	for tag in ROBOT_TAGS:
 		if agentLower.find (tag) != -1:
@@ -113,6 +188,27 @@ def isRobot (agentLower):
 def isScript (agentLower):
 	for tag in SCRIPT_TAGS:
 		if agentLower.find (tag) != -1:
+			return True
+	return False
+
+def includeDate (dateTime):
+	dateStr = logDate(dateTime)
+	if AFTER_DATE and dateStr > AFTER_DATE:
+		return False
+	if BEFORE_DATE and dateStr < BEFORE_DATE:
+		return False
+	return True 
+
+# strings which identify GXD pages
+GXD_TAGS = [ 'expression', 'gxdindex', 'estclone', 'anatdict', 'AMA', 'GEN',
+	'markerTissues', 'antibody', 'antigen', '/image.cgi', 'exptools',
+	'GXD', 'gxd_tissue_report', 'imageSummaryByMrk', 'ADRefiner',
+	'cDNAQF'
+	]
+
+def isGxd (uri):
+	for tag in GXD_TAGS:
+		if uri.find (tag) != -1:
 			return True
 	return False
 
@@ -128,7 +224,12 @@ def filter():
 
 		if ROBOTS or SCRIPTS:
 			if numFields >= 12:
-				agent = fields[11].lower()
+				# the agent field is enclosed in quotes and
+				# may include spaces, so just put back
+				# together everything after field 11; it will
+				# be close enough
+
+				agent = ' '.join(fields[11:]).lower()
 				if ROBOTS and isRobot(agent):
 					output = False
 				elif SCRIPTS and isScript(agent):
@@ -142,6 +243,16 @@ def filter():
 			if numFields >= 7:
 				if isImage(fields[6].lower()):
 					output = False
+
+		if output and GXD:
+			if numFields >= 7:
+				if isGxd(fields[6]):
+					output = False
+
+		if output and (BEFORE_DATE or AFTER_DATE):
+			if numFields >= 4:
+				output = includeDate(fields[3])
+
 		if REVERSE:
 			output = not output
 
