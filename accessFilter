@@ -6,6 +6,7 @@
 import sys
 import getopt
 import re
+import runCommand
 
 USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o <filename>]
 	Serves as a filter for Apache access logs.  Can be used to strip out
@@ -49,7 +50,7 @@ BEFORE_DATE = None
 REVERSE = False
 
 ROBOT_TAGS = [ 'bot', 'jeeves', 'inktomi', 'crawl', 'webcapture', 'webcopier',
-	'slurp', ]
+	'slurp', 'spider', ]
 SCRIPT_TAGS = [ 'python', 'perl', 'java', 'mfc' ]
 
 # mm/dd/yyyy dates from user
@@ -167,6 +168,8 @@ def isMgi (ip):
 	    	return True
 	if ip.endswith('informatics.jax.org'):
 		return True
+	if ip.startswith('wolvecamp'):
+		return True
 	return False
 
 def isImage (uriLower):
@@ -179,7 +182,52 @@ def isImage (uriLower):
 
 	return False
 
-def isRobot (agentLower):
+ROBOT_IP = {}
+NUMERIC_RE = re.compile ('^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+NAME_RE = re.compile ('Name: *\(.*\)')
+RESOLVED = 0
+UNIQUE = 0
+ROBOT_IPS = 0
+
+def isRobot (ip, agentLower):
+	global ROBOT_IP, NUMERIC_RE, NAME_RE, RESOLVED, UNIQUE, ROBOT_IPS
+
+	if ROBOT_IP.has_key(ip):
+		# if we know this is a robot based on IP address, just report
+		# it.  if the IP hasn't flagged it as a robot, then we need to
+		# check the user agent.  (the same computer may use a browser
+		# sometimes and use robot/scripting sometimes)
+
+		if ROBOT_IP[ip] == True:
+			return True
+	else:
+		address = ip
+
+		# if is numeric address need to resolve to name using nslookup
+		# (if possible)
+
+		if NUMERIC_RE.match(ip):
+			UNIQUE = UNIQUE + 1
+			(stdout, stderr, exitCode) = runCommand.runCommand (
+				'nslookup %s' % ip)
+
+			lines = stdout.split ('\n')
+			if (len(lines) >= 4) and (lines[3].find('Name') != -1):
+				match = NAME_RE.search (lines[3])
+				if match:
+					address = match.group(1)
+					RESOLVED = RESOLVED + 1
+
+		for tag in ROBOT_TAGS:
+			if address.find (tag) != -1:
+				ROBOT_IP[ip] = True
+				ROBOT_IPS = ROBOT_IPS + 1
+				return True
+
+		ROBOT_IP[ip] = False
+
+	# check user agent
+
 	for tag in ROBOT_TAGS:
 		if agentLower.find (tag) != -1:
 			return True
@@ -230,7 +278,7 @@ def filter():
 				# be close enough
 
 				agent = ' '.join(fields[11:]).lower()
-				if ROBOTS and isRobot(agent):
+				if ROBOTS and isRobot(fields[0], agent):
 					output = False
 				elif SCRIPTS and isScript(agent):
 					output = False
@@ -266,6 +314,8 @@ def main():
 	processCommandLine()
 	filter()
 	closeFiles()
+	if UNIQUE > 0:
+		sys.stderr.write ('FYI: Resolved %d of %d IP addresses, %d flagged as robots\n' % (RESOLVED, UNIQUE, ROBOT_IPS))
 
 if __name__ == '__main__':
 	main()
