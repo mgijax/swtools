@@ -1,0 +1,138 @@
+#!/usr/local/bin/python
+
+# analyzes apache access.log files to provide information about which MGI
+# pages are commonly displayed after referrals from other MGI pages
+
+import urllib
+import sys
+import re
+
+USAGE = '''Usage: %s <log file 1> [<log file n>...]
+	Analyzes Apache access.log files to present a report of which MGI
+	pages commonly refer traffic to which other MGI pages.  This should
+	help identify how users traverse MGI.
+''' % sys.argv[0]
+
+page_re = re.compile ('javawi2.*page=([^&"]*)')
+file1_re = re.compile ('/([^?/]*)\?')
+file2_re = re.compile ('/([^?/"]*)"?$')
+
+entering = {}
+leaving = {}
+
+def bailout (s):
+	sys.stderr.write (USAGE + '\n')
+	if s:
+		sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def getPage (url):
+	global page_re, file1_re, file2_re
+
+	url = urllib.unquote(url)
+	url = url.replace(' ', '')
+	url = url.replace('\n', '')
+
+	if url.find('?') != -1:
+		if url.find ('javawi2') != -1:
+			match = page_re.search(url)
+		else:
+			match = file1_re.search(url)
+	else:
+		match = file2_re.search(url)
+
+	if match:
+		if match.group(1) == '':
+			return '/'
+		return match.group(1)
+	return url
+
+def processLine (line):
+	global entering, leaving
+
+	fields = line.split (' ')
+	if len(fields) < 11:
+		return
+
+	pos = fields[10].find ('informatics.jax.org')
+	if (pos == -1) or (pos > 15):
+		return
+
+	page = getPage(fields[6])
+	referrer = getPage(fields[10])
+
+	if not entering.has_key(page):
+		entering[page] = { referrer : 1 }
+	elif not entering[page].has_key(referrer):
+		entering[page][referrer] = 1
+	else:
+		entering[page][referrer] = 1 + entering[page][referrer]
+
+	if not leaving.has_key(referrer):
+		leaving[referrer] = { page : 1 }
+	elif not leaving[referrer].has_key(page):
+		leaving[referrer][page] = 1
+	else:
+		leaving[referrer][page] = 1 + leaving[referrer][page]
+	return
+
+def processFile (filename):
+	try:
+		fp = open(filename, 'r')
+	except:
+		bailout ('Cannot open file: %s' % filename)
+
+	line = fp.readline()
+	while line:
+		processLine (line)
+		line = fp.readline()
+	fp.close()
+	return
+
+def cmp2 (a, b):
+	x = cmp(b[1], a[1])
+	if x == 0:
+		return cmp(a[0], b[0])
+	return x
+
+def report ():
+	pages = entering.keys()
+	for key in leaving.keys():
+		if key not in pages:
+			pages.append (key)
+	pages.sort()
+
+	for page in pages:
+		print '-' * len(page)
+		print page
+		print '-' * len(page)
+		print
+		
+		if entering.has_key(page):
+			items = entering[page].items()
+			items.sort (cmp2)
+
+			print 'Hits to %s when coming from...' % page
+			for (ref, count) in items:
+				print '%8d %s' % (count, ref)
+			print
+
+		if leaving.has_key(page):
+			items = leaving[page].items()
+			items.sort (cmp2)
+
+			print 'Leaving %s and going to...' % page
+			for (page, count) in items:
+				print '%8d %s' % (count, page)
+			print
+	return
+
+def main():
+	if len(sys.argv) < 2:
+		bailout ('No log files specified on command-line')
+	for filename in sys.argv[1:]:
+		processFile (filename)
+	report()
+
+if __name__ == '__main__':
+	main()
