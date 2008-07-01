@@ -1,0 +1,209 @@
+#!/usr/local/bin/python
+
+# translate instances of accession_report.cgi calls for a single page to be
+# named according to the type of object requested
+
+import sys
+import re
+import os
+import db
+
+USAGE = '''Usage: %s
+	This script is a command-line filter; input should be piped into it
+	as stdin, and output is written to stdout.  It translates URLs for
+	the accession_report.cgi script to be more friendly for log
+	processing programs.  (It converts the URL depending on the type of
+	object requested.)
+
+	For example, this URL:
+	    http://a.b.c.d/searches/accession_report.cgi?id=MGI:12345
+	would be translated to something like:
+	    http://a.b.c.d/javawi2/markerDetail?id=MGI:12345
+
+	Example:  cat access.log | %s > temp.out
+''' % (sys.argv[0], sys.argv[0])
+
+accRegex = re.compile ('(searches/accession_report.cgi\\?)id=([^ "]*)')
+
+jnums = {}
+mginums = {}
+other = {}
+
+counts = {}
+failed = 0
+multi = 0
+unknown = 0
+badType = 0
+
+pageByType = {
+	1 : 'searches/reference.cgi',
+	2 : 'javawi2/markerDetail',
+	3 : 'searches/probe.cgi',
+	4 : 'searches/mapdata.cgi',
+	6 : 'searches/antibody.cgi',
+	7 : 'searches/antigen.cgi',
+	8 : 'searches/expression.cgi',
+	9 : 'searches/image.cgi',
+	11 : 'javawi2/alleleDetail',
+	13 : 'javawi2/vocabTerm',
+	19 : 'javawi2/sequenceDetail',
+	30 : 'javawi2/snpDetail',
+	31 : 'javawi2/snpDetail',
+	}
+
+def bailout (msg, showUsage = False):
+	if showUsage:
+		sys.stderr.write (USAGE + '\n')
+	sys.stderr.write ('Error: %s\n' % msg)
+	sys.exit(1)
+
+def buildCaches():
+	global jnums, mginums
+
+	cmd1 = '''select accID, _MGIType_key
+		from ACC_Accession
+		where _LogicalDB_key = 1
+			and prefixPart = "J:"
+			and private = 0'''
+
+	cmd2 = '''select accID, _MGIType_key
+		from ACC_Accession
+		where _LogicalDB_key = 1
+			and prefixPart = "MGI:"
+			and private = 0'''
+
+	results = db.sql (cmd1, 'auto')
+	for row in results:
+		jnums[row['accID'].lower()] = row['_MGIType_key']
+	sys.stderr.write ('Cached %d J-numbers\n' % len(jnums))
+
+	results = db.sql (cmd2, 'auto')
+	for row in results:
+		mginums[row['accID'].lower()] = row['_MGIType_key']
+	sys.stderr.write ('Cached %d MGI IDs\n' % len(mginums))
+
+	return
+
+def getPage (id):
+	global jnums, mginums, other, counts, failed, unknown, badType
+
+	id = id.lower()
+
+	if mginums.has_key(id):
+		typeKey = mginums[id]
+	elif mginums.has_key(id):
+		typeKey = mginums[id]
+	elif other.has_key(id):
+		typeKey = other[id]
+	else:
+		cmd = '''select distinct _MGIType_key
+			from ACC_Accession
+			where accID = "%s"
+				and private = 0''' % id
+		results = db.sql (cmd, 'auto')
+
+		if len(results) == 1:
+			typeKey = results[0]['_MGIType_key']
+		elif len(results) > 1:
+			typeKey = None
+			failed = failed + 1
+		else:
+			typeKey = None
+			unknown = unknown + 1
+
+		other[id] = typeKey
+
+	if typeKey != None:
+		if counts.has_key(typeKey):
+			counts[typeKey] = counts[typeKey] + 1
+		else:
+			counts[typeKey] = 1
+
+	if pageByType.has_key(typeKey):
+		page = pageByType[typeKey]
+	else:
+		if typeKey != None:
+			badType = badType + 1
+		page = None
+
+	return page
+
+def translated (line):
+	global multi, accRegex
+
+	match = accRegex.search(line)
+	while match:
+		ids = match.group(2)
+
+		# we can only convert it if we have a single ID
+
+		if ids.find ('&') == -1:
+			page = getPage(ids)
+		else:
+			multi = multi + 1
+			page = None
+
+		if page != None:
+			line = line[:match.start(0)] + page + '?id=' + ids + \
+				line[match.end(0):]
+
+			match = accRegex.search(line)
+		else:
+			match = accRegex.search(line, match.start(0) + 1)
+
+	return line
+
+def report():
+	if counts:
+		mgitypes = {}
+		cmd = 'select _MGIType_key, name from ACC_MGIType'
+		for row in db.sql (cmd, 'auto'):
+			mgitypes[row['_MGIType_key']] = row['name']
+
+		types = counts.keys()
+		types.sort()
+		sys.stderr.write ('Converted...\n')
+		for typeKey in types:
+			sys.stderr.write ('%10d %s\n' % (counts[typeKey],
+				mgitypes[typeKey]))
+
+	sys.stderr.write ('J-number cache size: %d IDs\n' % len(jnums))
+	sys.stderr.write ('MGI ID cache size: %d IDs\n' % len(mginums))
+
+	if other:
+		sys.stderr.write ('Retrieved %d non-MGI IDs\n' % len(other))
+	if unknown:
+		sys.stderr.write ('Failed to convert %d unknown IDs\n' % \
+			unknown)
+	if badType:
+		sys.stderr.write ( \
+			'Failed to convert %d IDs with bad types\n' % \
+			badTypes)
+	if failed:
+		sys.stderr.write ( \
+			'Failed to convert %d IDs with multiple types\n' % \
+			failed)
+	if multi:
+		sys.stderr.write ( \
+			'Failed to convert %d calls with multiple IDs\n' % \
+			multi)
+	return
+
+def main():
+	try:
+		db.set_sqlLogin ('mgd_public', 'mgdpub', 'DEV_MGI', 'mgd')
+		db.sql ('select count(1) from MGI_dbInfo', 'auto')
+	except:
+		bailout ('Failed to log into DEV_MGI..mgd')
+
+	buildCaches()
+	line = sys.stdin.readline()
+	while line:
+		print translated(line[:-1])
+		line = sys.stdin.readline()
+
+	report()
+	return
+
+if __name__ == '__main__':
+	main()
