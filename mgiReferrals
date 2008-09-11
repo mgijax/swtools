@@ -20,6 +20,9 @@ file2_re = re.compile ('/([^?/"]*)"?$')
 entering = {}
 leaving = {}
 
+enteringIP = {}
+leavingIP = {}
+
 def bailout (s):
 	sys.stderr.write (USAGE + '\n')
 	if s:
@@ -48,7 +51,7 @@ def getPage (url):
 	return url
 
 def processLine (line):
-	global entering, leaving
+	global entering, leaving, enteringIP, leavingIP
 
 	fields = line.split (' ')
 	if len(fields) < 11:
@@ -60,20 +63,27 @@ def processLine (line):
 
 	page = getPage(fields[6])
 	referrer = getPage(fields[10])
+	ip = fields[0]
 
 	if not entering.has_key(page):
 		entering[page] = { referrer : 1 }
+		enteringIP[page] = { referrer : { ip : 1 } }
 	elif not entering[page].has_key(referrer):
 		entering[page][referrer] = 1
+		enteringIP[page][referrer] = { ip : 1 }
 	else:
 		entering[page][referrer] = 1 + entering[page][referrer]
+		enteringIP[page][referrer][ip] = 1
 
 	if not leaving.has_key(referrer):
 		leaving[referrer] = { page : 1 }
+		leavingIP[referrer] = { page : { ip : 1 } }
 	elif not leaving[referrer].has_key(page):
 		leaving[referrer][page] = 1
+		leavingIP[referrer][page] = { ip : 1 }
 	else:
 		leaving[referrer][page] = 1 + leaving[referrer][page]
+		leavingIP[referrer][page][ip] = 1
 	return
 
 def processFile (filename):
@@ -114,7 +124,8 @@ def report ():
 
 			print 'Hits to %s when coming from...' % page
 			for (ref, count) in items:
-				print '%8d %s' % (count, ref)
+				print '%8d (%4d users) %s' % (count,
+				    len(enteringIP[page][ref]), ref)
 			print
 
 		if leaving.has_key(page):
@@ -122,9 +133,10 @@ def report ():
 			items.sort (cmp2)
 
 			print 'Leaving %s and going to...' % page
-			for (page, count) in items:
-				print '%8d %s' % (count, page)
-			print
+			for (ref, count) in items:
+				print '%8d (%4d users) %s' % (count,
+				    len(leavingIP[page][ref]), ref)
+			print			
 	return
 
 def main():
