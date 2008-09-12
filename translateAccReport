@@ -89,8 +89,8 @@ def getPage (id):
 
 	id = id.lower()
 
-	if mginums.has_key(id):
-		typeKey = mginums[id]
+	if jnums.has_key(id):
+		typeKey = jnums[id]
 	elif mginums.has_key(id):
 		typeKey = mginums[id]
 	elif other.has_key(id):
