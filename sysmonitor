@@ -1,0 +1,579 @@
+#!/usr/local/bin/python
+
+# does performance monitoring of various server components with emailed
+# reports
+
+import sys
+import re
+import time
+import getopt
+import os
+import Configuration
+import db
+import runCommand
+import mgi_utils
+
+USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-w <email>][-l <file>][-n <int>][-m <name>][-c <config file>][-a][-i][-y][-v]
+    Purpose:
+    	Monitors a Solaris box's load over time, extracting data from runs
+	of top, uptime, and sp_who.
+    Options:
+	-s : sleep time between runs (an integer number of minutes)
+	-h : send hourly reports to given email address
+	-d : send daily reports to given email address
+	-w : send warning reports as they happen to given email address
+	-l : write all reports to the given log file
+	-n : integer number of runs to do
+	-m : name for this monitoring run, to include in email subject
+	-c : path to configuration file to find database access parameters
+	-a : include histogram of load average
+	-i : include histogram of idle CPU percentage
+	-y : include histogram of number of db connections
+	-v : run in verbose mode (include full data set with each report)
+    Notes:
+	1. If the -s option is not specified, the default is to run at
+	fifteen minute intervals.
+	2. At least one of the reporting options (-h, -d, -w, -l) must
+	be specified.
+	3. A "warning" (-w) is issued when a certain threshold has been
+	crossed, for example:
+		* less than 10%% idle CPU time
+		* more than 50 simultaneous sybase connections
+	4. Log files must be unique; they will not be overwritten.
+	5. If the -n flag is not used to specify a number of runs, the default
+	behavior is to run continuously.  (kill the process to stop it)
+	6. If using the -n flag with the -h or the -d flag, then a final
+	report will be emailed when the last run has finished (in addition to
+	any which occur because of the hourly or daily times).
+	7. If -c is specified, we read the configuration file on each run to
+	get the current database-access parameters.  The file should be one
+	usable by the MGI WI.  This would allow us to appropriately switch
+	between public databases.  If -c is not specified, then we do not do
+	database monitoring.
+	8. If -m is specified, the name will be included in the email's subect
+	line.  This would allow easy flagging of production monitoring versus
+	public monitoring, for example.
+''' % sys.argv[0]
+
+###------------------------###
+###--- global variables ---###
+###------------------------###
+
+# command-line options:
+
+EHOURLY=None		# email address for hourly reporting
+EDAILY=None		# email address for daily reporting
+WARNING=None		# email address for timeout reporting
+LOG=None		# log file location for all reporting
+SLEEPTIME=15 * 60	# time (in seconds) between runs
+RUNS_LEFT=None		# if non-None, integer number of runs left to do
+RUN_NAME=None		# string; name of this run, for email subject
+CONFIG_PATH=None	# string; path to config file
+HISTO_LOADAVG=False	# boolean; include histogram of load average?
+HISTO_IDLE=False	# boolean; include histogram of idle CPU time?
+HISTO_DB=False		# boolean; include histogram of db connections?
+VERBOSE=False		# boolean; include full data set?
+
+# monitoring for reporting:
+
+WARNINGS = []	  # list of strings, each a warning for this run
+DAILY=[]    	  # list of dictionaries, one per measurement cycle today
+HOURLY=[]   	  # list of dictionaries, one per measurement cycle this hour
+DAILY_STARTS=[]	  # list of "mm/dd/yyyy hh:mm:ss" start times for whole day
+HOURLY_STARTS=[]  # list of "mm/dd/yyyy hh:mm:ss" start times for this hour
+HOURLY_REPORTS=0  # count of hourly reports completed
+
+# internal tracking:
+
+NEXT_REPORT = time.time() + 3600	# 1 hour * 60 min * 60 sec from now
+NEXT_RUN = time.time()
+
+DIVIDER = '###%s###\n' % ('-' * 64)
+
+###----------------------------###
+###--- supporting functions ---###
+###----------------------------###
+
+def logMessage (message):
+	global LOG
+
+	if LOG:
+		fp = open (LOG, 'a')
+		fp.write (message + '\n')
+		fp.write (DIVIDER)
+		fp.close()
+	return
+
+def collectWarning (message):
+	global WARNINGS
+
+	WARNINGS.append (message)
+	return
+
+def execute (cmd):
+	(stdout, stderr, exitcode) = runCommand.runCommand (cmd)
+	if stderr or exitcode:
+	    collectWarning (
+		'Error when executing "%s" : exit code "%d" : stderr "%s"' % (
+			cmd, exitcode, stderr) )
+	    return None
+	return stdout
+
+def extractNumbers (line):
+	# extracts all numbers from line, returning them in a list
+
+	strList = re.findall ('[0-9]+\.?[0-9]*', line)
+	numList = []
+
+	for item in strList:
+		if item.find('.') >= 0:
+			numList.append (float(item))
+		else:
+			numList.append (int(item))
+	return numList
+
+###-----------------------------###
+###--- measurement functions ---###
+###-----------------------------###
+
+def doTop():
+	# need to take two top measurements, then ignore the first (which
+	# does not have CPU usage measured)
+
+	stdout = execute('top -d2')
+	if not stdout:
+		return {}
+
+	# throw out the first set of measurements, and just keep the second
+	# one with the CPU measurements
+
+	sections = stdout.split ('last pid:')
+	lines = sections[2].split ('\n')
+	dict = {}
+
+	line1 = extractNumbers(lines[0])
+	line3 = extractNumbers(lines[2])
+
+	dict['load average  1-min'] = line1[1]
+	dict['load average  5-min'] = line1[2]
+	dict['load average 15-min'] = line1[3]
+	dict['cpu idle %'] = line3[0]
+	dict['cpu user %'] = line3[1]
+	dict['cpu kernel %'] = line3[2]
+	dict['cpu iowait %'] = line3[3]
+	dict['cpu swap %'] = line3[4]
+
+	if dict['cpu idle %'] < 10.0:
+		collectWarning ('CPU less than 5% idle')
+
+	ct = 0
+	for line in lines[5:]:
+		if line.find('dataserver') >= 0:
+			ct = ct + 1
+			numbers = extractNumbers(line)
+			dict['sybase engine %d (%% CPU)' % ct] = numbers[-1]
+
+	return dict
+
+def doUptime():
+	stdout = execute('uptime')
+	if not stdout:
+		return {}
+
+	numbers = extractNumbers(stdout)
+	return { 'solaris user sessions' : numbers[5] }
+
+def doSybase():
+	config = Configuration.Configuration (CONFIG_PATH)
+	try:
+		db.set_sqlLogin (config['DB_USER'], config['DB_PASSWORD'],
+			config['DB_SERVER'], config['DB_DATABASE'])
+	except:
+		collectWarning ('Cannot log in to sybase')
+		return {}
+
+	try:
+		results = db.sql ('sp_who', 'auto')
+	except:
+		collectWarning ('Cannot run sp_who on sybase')
+		return {}
+
+	pubCt = 0
+	othCt = 0
+
+	for row in results:
+		if row['dbname'] == 'master':
+			continue
+		if row['loginame'] == 'mgd_public':
+			pubCt = pubCt + 1
+		else:
+			othCt = othCt + 1
+
+	# do not count the connection used for running sp_who
+	if (config['DB_USER'] == 'mgd_public') and (pubCt > 0):
+		pubCt = pubCt - 1
+	elif othCt > 0:
+		othCt = othCt - 1
+
+	if (pubCt + othCt) >= 70:
+		collectWarning (
+			'Sybase has >= 70 connections: %d public, %d other' \
+				% (pubCt, othCt))
+
+	return {
+		'sybase connections (all)' : pubCt + othCt,
+		'sybase connections (mgd_public)' : pubCt,
+		'sybase connections (others)' : othCt,
+		}
+
+###-----------------###
+###--- functions ---###
+###-----------------###
+
+def bailout (msg, showUsage=False):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % msg)
+	sys.exit(1)
+
+def processCommandLine():
+	global EHOURLY, EDAILY, WARNING, LOG, SLEEPTIME, RUNS_LEFT, RUN_NAME
+	global CONFIG_PATH, HISTO_LOADAVG, HISTO_IDLE, HISTO_DB, VERBOSE
+
+	try:
+		(options, args) = getopt.getopt(sys.argv[1:],
+			's:h:d:w:l:n:m:c:aiyv')
+	except getopt.GetoptError:
+		bailout ('Improper command-line option(s)', True)
+
+	for (option, value) in options:
+		if option == '-s':
+			try:
+				SLEEPTIME = int(value) * 60
+			except:
+				bailout ('-s flag requires integer value', True)
+		elif option == '-n':
+			try:
+				RUNS_LEFT = int(value)
+			except:
+				bailout ('-n flag requires integer value', True)
+		elif option == '-h':
+			EHOURLY = value
+		elif option == '-d':
+			EDAILY = value
+		elif option == '-w':
+			WARNING = value
+		elif option == '-m':
+			RUN_NAME = value
+		elif option == '-c':
+			CONFIG_PATH = value
+		elif option == '-l':
+			LOG = value
+			if os.path.exists (LOG):
+				bailout ('Log file already exists: %s' % LOG,
+					True)
+			try:
+				fp = open (LOG, 'w')
+				fp.write ('Start time: ')
+				fp.write (time.strftime('%m/%d/%Y %H:%M:%S\n',
+					time.localtime (time.time()) ))
+				fp.write ('Command line: %s\n' % \
+					' '.join (sys.argv))
+				fp.write (DIVIDER)
+				fp.close()
+			except:
+				bailout ('Cannot write to log file: %s' % LOG,
+					True)
+		elif option == '-a':
+			HISTO_LOADAVG = True
+		elif option == '-i':
+			HISTO_IDLE = True
+		elif option == '-y':
+			HISTO_DB = True
+		elif option == '-v':
+			VERBOSE = True
+		else:
+			bailout ('Unrecognized option: %s' % option, True)
+
+	if len(args) > 0:
+		bailout ('Too many command-line arguments', True)
+
+	if not (EHOURLY or EDAILY or WARNING or LOG):
+		bailout ('At least one of -h, -d, -w, or -l must be used',
+			True)
+	return
+
+def highLowAverage (times):
+	if not times:
+		return 0.0, 0.0, 0.0
+
+	sum = 0.0
+	low = times[0]
+	high = times[0]
+
+	for time in times:
+		sum = sum + time
+		if time < low:
+			low = time
+		elif time > high:
+			high = time
+
+	return high, low, sum * 1.0 / len(times)
+
+def histogram (stats, startTimes, key):
+	if len(stats) != len(startTimes):
+		return 'Error: mismatch in stats and times'
+
+	high = 0
+	for dict in stats:
+		if dict.has_key (key):
+			if dict[key] > high:
+				high = dict[key]
+	if high == 0:
+		return 'Error: all measurements were zero'
+
+#	high = int(round(high))
+	step = high / 40.0		# up to 40 blocks
+
+	lines = [ 'each * is worth %2.2f' % step ]
+	lines.append ('-' * len(lines[0]))
+
+	template = '%s [%8.2f] %s'
+
+	i = 0
+	for dict in stats: 
+		value = dict[key]
+		bar = '*' * int(round(value / step))
+		lines.append (template % (startTimes[i], value, bar))
+		i = i + 1
+
+	return '\n'.join (lines)
+
+def getHistograms (stats, startTimes):
+	histograms = []
+
+	if HISTO_LOADAVG:
+		histograms.append ('-' * 75)
+		histograms.append ('load average  1-min')
+		histograms.append ('-------------------')
+		histograms.append (histogram (stats, startTimes,
+			'load average  1-min'))
+	if HISTO_IDLE:
+		histograms.append ('-' * 75)
+		histograms.append ('cpu idle %')
+		histograms.append ('----------')
+		histograms.append (histogram (stats, startTimes,
+			'cpu idle %'))
+	if HISTO_DB:
+		histograms.append ('-' * 75)
+		histograms.append ('sybase connections (all)')
+		histograms.append ('------------------------')
+		histograms.append (histogram (stats, startTimes,
+			'sybase connections (all)'))
+	if histograms:
+		histograms.append ('-' * 75)
+
+	return '\n'.join (histograms)
+
+def generateReport (header, stats, startTimes):
+	top = [ header ]
+
+	if RUN_NAME:
+		top.append ('%s : monitored for %d runs' % (RUN_NAME,
+			len(startTimes)))
+	else:
+		top.append ('monitored for %d runs' % len(startTimes))
+
+	combo = {}
+	for oneRun in stats:
+		for (key, value) in oneRun.items():
+			if combo.has_key (key):
+				combo[key].append (value)
+			else:
+				combo[key] = [ value ]
+
+	hiLoAvg = {}	# key -> (high value, low value, average)
+	maxKeyLen = 0	# maximum string length of key
+
+	for (key, values) in combo.items():
+		hiLoAvg[key] = highLowAverage (values)
+		if len(key) > maxKeyLen:
+			maxKeyLen = len(key)
+
+	lines = [ '',
+		'Measurement'.ljust(maxKeyLen) + '   Average    High     Low',
+		'-' * maxKeyLen + '  --------  --------  --------',
+		]
+
+	titles = combo.keys()
+	titles.sort()
+
+	for key in titles:
+		(hi, lo, avg) = hiLoAvg[key]
+		title = key.ljust(maxKeyLen)
+
+		lines.append('%s  %8.2f  %8.2f  %8.2f' % (title, avg, hi, lo))
+
+	lines.append ('')
+
+	histograms = getHistograms (stats, startTimes)
+	if histograms:
+		lines.append (histograms)
+	
+	if not VERBOSE:
+		lines.append ('Start times of runs:')
+		for startTime in startTimes:
+			lines.append ('\t%s' % startTime)
+	else:
+		lines.append ('Full set of collected data (verbose mode):')
+		i = 0
+		for dict in stats:
+			lines.append ('  %s' % startTimes[i])
+			kys = dict.keys()
+			kys.sort()
+			for key in kys:
+				lines.append ('    %-33s %8.2f' % (key,
+					dict[key]))
+			i = i + 1
+
+	return '\n'.join (top + lines)
+
+def copyHourlyToDaily():
+	global DAILY_STARTS, DAILY
+
+	DAILY_STARTS = DAILY_STARTS + HOURLY_STARTS
+	DAILY = DAILY + HOURLY
+	return
+
+def finalReport():
+	if HOURLY_STARTS:
+		copyHourlyToDaily()
+
+	report = generateReport ('Final Report for Fixed Number of Runs',
+		DAILY, DAILY_STARTS)
+
+	logMessage (report)
+	sendMessage (report, 'Final Report for Fixed Number of Runs', EHOURLY)
+	if (EHOURLY != EDAILY):
+		sendMessage (report, 'Final Report for Fixed Number of Runs',
+			EDAILY)
+	return
+
+def dailyReport():
+	global DAILY, DAILY_STARTS
+
+	if LOG or EDAILY:
+		report = generateReport ('Daily Report', DAILY, DAILY_STARTS)
+
+		logMessage (report)
+		sendMessage (report, 'Daily Report', EDAILY)
+		
+	DAILY = []
+	DAILY_STARTS = []
+
+	return
+
+def hourlyReport():
+	global HOURLY_REPORTS, HOURLY_STARTS, DAILY_STARTS
+	global DAILY, HOURLY
+
+	if LOG or EHOURLY:
+		report = generateReport ('Hourly Report', HOURLY,
+			HOURLY_STARTS)
+		logMessage (report)
+		sendMessage (report, 'Hourly Report', EHOURLY)
+
+	# update daily data with data for the hour that just passed
+
+	copyHourlyToDaily()
+
+	# get ready for the next hour
+
+	HOURLY_REPORTS = HOURLY_REPORTS + 1
+	HOURLY_STARTS = []
+	HOURLY = []
+	return
+
+def sendMessage (message, subject, email):
+	global RUN_NAME
+
+	if email:
+		if RUN_NAME:
+			subject = '%s: %s' % (RUN_NAME, subject)
+		try:
+			mgi_utils.send_Mail ('sysmonitor', email, subject,
+				message)
+		except:
+			logMessage (
+				'Failed to send email to: %s (subject: %s)' \
+				% (email, subject))
+	return
+
+def measure():
+	global HOURLY_STARTS, HOURLY, CONFIG_PATH, WARNINGS
+
+	startTime = time.strftime ('%m/%d/%Y %H:%M:%S',
+		time.localtime (time.time()) )
+	HOURLY_STARTS.append (startTime)
+
+	WARNINGS = [] 	# no warnings yet
+	results = {}	# no results yet
+
+	results.update(doTop())
+	results.update(doUptime())
+	if CONFIG_PATH:
+		results.update(doSybase())
+
+	HOURLY.append (results)
+
+	if WARNINGS:
+		WARNINGS.insert (0, 'Warnings from %s' % startTime)
+		warnings = '\n'.join (WARNINGS)
+		sendMessage (warnings, 'Warnings', WARNING)
+		logMessage (warnings)
+	return
+
+def main():
+	global HOURLY_REPORTS, NEXT_RUN, NEXT_REPORT, RUNS_LEFT
+
+	while True:
+		if time.time() >= NEXT_RUN:
+			measure()
+			NEXT_RUN = NEXT_RUN + SLEEPTIME
+
+		if time.time() >= NEXT_REPORT:
+			hourlyReport()
+			if HOURLY_REPORTS >= 24:
+				dailyReport()
+				HOURLY_REPORTS = 0
+			NEXT_REPORT = NEXT_REPORT + 3600
+
+		if RUNS_LEFT != None:
+			RUNS_LEFT = RUNS_LEFT - 1
+			if RUNS_LEFT == 0:
+				finalReport()
+				sys.exit(0)
+
+		# must have at least a 2 second delay before the next run
+		# (arbitrary; just need a cushion to get through the next
+		# few lines without taking a chance on a negative sleep time)
+
+		checkTime = time.time() + 2
+		if (checkTime > NEXT_RUN) or (checkTime > NEXT_REPORT):
+			bailout ('-s value is too small; need a longer delay',
+				True)
+
+		if NEXT_RUN <= NEXT_REPORT:
+			time.sleep (NEXT_RUN - time.time())
+		else:
+			time.sleep (NEXT_REPORT - time.time())
+	return
+
+###--------------------###
+###--- main program ---###
+###--------------------###
+
+if __name__ == '__main__':
+	processCommandLine()
+	main()
+
