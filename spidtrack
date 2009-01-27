@@ -1,0 +1,286 @@
+#!/usr/local/bin/python
+
+# tracks down info relating to a Sybase SPID (process ID), tying it back to
+# its solaris process, user, etc.
+
+import sys
+sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+import os
+import getopt
+import db
+import runCommand
+
+USAGE = '''Usage: %s -S <db server> [-D <database>] [-U <db user>] [-i <SPID>]
+    Purpose:
+	Tracks down information about current user sesssions within Sybase,
+	based on database process ID (SPID), username, or database.
+    Options:
+	-S : required; which database server
+	-D : optional; which database
+	-U : optional; which database username to examine, NOT which to use
+		to log into the database
+	-i : optional; which SPID
+    Notes:
+	1. If -D is used, will report on processes for that database.
+	2. If -U is used, will report on processes for that database user.
+	3. If -i is used, will report on that particular SPID.
+	4. If only -S is used, will report on all processes for that server.
+	5. Using -D and -U may be useful, but using either with -i is probably
+		redundant.  (If you already know the SPID, you already have
+		more detail than just the database and/or user.)
+''' % sys.argv[0]
+
+SERVER = None
+DATABASE = None
+USER = None
+SPID = None
+PROCESSES = {}
+ERRORS = []
+
+def bailout (msg, showUsage=False, isError=True):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	if isError:
+		sys.stderr.write ('Error: %s\n' % msg)
+	else:
+		sys.stderr.write ('Report: %s\n' % msg)
+		sys.exit(0)
+	sys.exit(1)
+
+def logError (e):
+	# collect non-fatal errors to display at once later on
+	global ERRORS
+	if e not in ERRORS:
+		ERRORS.append (e)
+	return
+
+def processCommandLine ():
+	global SERVER, DATABASE, USER, SPID
+	try:
+		options, args = getopt.getopt (sys.argv[1:], 'S:D:U:i:')
+	except getopt.GetoptError:
+		bailout ('Improper command-line option(s)', True)
+
+	for (option, value) in options:
+		if option == '-S':
+			SERVER = value
+		elif option == '-D':
+			DATABASE = value
+		elif option == '-U':
+			USER = value
+		elif option == '-i':
+			SPID = value
+		else:
+			bailout ('Invalid option: %s' % option, True)
+
+	if not SERVER:
+		bailout ('Must specify database server using -S', True)
+
+	db.set_sqlLogin ('mgd_public', 'mgdpub', SERVER, 'master')
+	return
+
+def querySybase ():
+	# gather what information we can from Sybase
+	global PROCESSES
+	if USER:
+		cmd = 'sp_who %s' % USER
+	else:
+		cmd = 'sp_who'
+
+	try:
+		results = db.sql (cmd, 'auto')
+	except:
+		bailout ('Fatal database error: sp_who failed')
+
+	for row in results:
+		valid = True
+
+		# omit standard Sybase processes, which have no login
+		if row['loginame'] == None:
+			valid = False
+
+		# omit processes with non-matching SPID, if one was specified
+		if SPID and (int(SPID) != row['spid']):
+			valid = False
+
+		# omit processes with non-matching database, if one was given
+		if DATABASE and (DATABASE != row['dbname']):
+			valid = False
+
+		if valid:
+			PROCESSES[row['spid']] = {
+				'database' : row['dbname'],
+				'database user' : row['loginame'],
+				}
+
+	if not PROCESSES:
+		if (DATABASE or USER or SPID):
+			bailout ('No processes matching criteria', False, False)
+		else:
+			bailout ('No processes on server', False, False)
+
+	# look up and fill in more details from sysprocesses table
+
+	cmd = '''SELECT spid, status, hostname, program_name, hostprocess,
+			cmd, ipaddr
+		FROM sysprocesses
+		WHERE spid IN (%s)''' % ','.join (map(str, PROCESSES.keys()))
+	try:
+		results = db.sql (cmd, 'auto')
+	except:
+		logError ('Database error: select from sysprocesses failed')
+		return
+
+	for row in results:
+		process = PROCESSES[row['spid']]
+		process['database access method'] = row['program_name']
+		process['database command'] = row['cmd']
+		process['database spid'] = row['spid']
+		process['database status'] = row['status']
+		process['host'] = row['hostname']
+		process['host IP'] = row['ipaddr']
+		process['host process'] = row['hostprocess']
+
+	for (key, process) in PROCESSES.items():
+		# remove our own connection
+		if len(process) == 2:
+			del PROCESSES[key]
+
+	if not PROCESSES:
+		if (DATABASE or USER or SPID):
+			bailout ('No processes matching criteria', False, False)
+		else:
+			bailout ('No processes on server', False, False)
+	return
+
+def processPsOutput (tpl, host, ip):
+	# extract data from the output of runCommand (in tpl, a tuple) for
+	# the given host/ip and update global PROCESSES
+
+	global PROCESSES
+
+	(stdout, stderr, exitcode) = tpl
+	if exitcode:
+		if host and len(host.strip()) > 0:
+			logError ('Cannot run ps on %s' % host)
+		elif ip and len(ip.strip()) > 0:
+			logError ('Cannot run ps on %s' % ip)
+		return
+
+	dict = {}
+	lines = stdout.split ('\n')[1:]		# skip header line
+	for line in lines:
+		fields = line.split()
+		if len(fields) >= 8:
+			hostprocess = int(fields[1])
+			dict[hostprocess] = {
+				'OS command' : ' '.join(fields[7:]),
+				'OS parent process' : fields[2],
+				'OS process' : fields[1],
+				'OS process start time' : fields[4],
+				'OS user' : fields[0],
+				}
+
+			# fix older processes with date-based timestamp
+			if len(fields[4]) == 3:
+				dict[hostprocess]['OS process start time'] = \
+					fields[4] + ' ' + fields[5]
+				dict[hostprocess]['OS command'] = \
+					' '.join(fields[8:])
+
+	# fill data into the global PROCESSES
+	for (key, process) in PROCESSES.items():
+		# if the process if from the host we are inquiring about, then
+		# that's one we should try to update
+
+		if (process.has_key('host') and (process['host'] == host)) \
+		or (process.has_key('host IP') and process['host IP'] == ip):
+			pid = process['host process'].strip()
+			try:
+				if dict.has_key(int(pid)):
+					 process.update (dict[int(pid)])
+			except:
+				# if something goes wrong with the conversion
+				# or lookup, just move on
+				pass
+	return
+
+def querySolaris ():
+	global PROCESSES
+
+	# bail out if we don't have any host info
+	anyHost = False
+	for (key, process) in PROCESSES.items():
+		if process.has_key('host') or process.has_key('host IP'):
+			anyHost = True
+			break
+
+	if not anyHost:
+		logError ('Insufficient data from database to tie to OS')
+		return
+
+	# get the set of the hosts we need to check { IP : host name }
+	hosts = {}
+	for (key, process) in PROCESSES.items():
+		# if we have an IP, use that as the key
+		if process.has_key('host IP') and \
+		    not hosts.has_key(process['host IP']):
+			hosts[process['host IP']] = process['host']
+
+		# otherwise, if we have a host name, use that as the key
+		elif process.has_key('host') and \
+		    not hosts.has_key(process['host']):
+			hosts[process['host']] = process['host']
+
+#	# find name of current solaris box
+#	stdout, stderr, exitcode = runCommand.runCommand ('hostname')
+#	if exitcode or stderr:
+#		logError ('Cannot find name of current host')
+#		host = None
+#	else:
+#		host = stdout.strip()
+#
+#	# get processes for current solaris box
+#	if host in hosts:
+#		processPsOutput (runCommand.runCommand ('ps -aef'), host)
+#		hosts.remove(host)
+
+	# use rsh to remotely execute ps on solaris boxes, if possible
+	for (ip, host) in hosts.items():
+		if ip and not ip.startswith('209.222'):
+			# don't try to rsh to any non-MGI servers
+			continue
+		elif ip:
+			processPsOutput (runCommand.runCommand (
+				'rsh %s "ps -aef"' % ip), host, ip)
+		elif host:
+			processPsOutput (runCommand.runCommand (
+				'rsh %s "ps -aef"' % host), host, host)
+	return
+
+def report ():
+	print '-' * 40
+	if ERRORS:
+		print 'Error Messages:'
+		for error in ERRORS:
+			print error
+		print '-' * 40
+	for (key, process) in PROCESSES.items():
+		fields = process.keys()
+		fields.sort()
+		maxFieldLength = max(map(len, fields))
+
+		for field in fields:
+			print field.ljust(maxFieldLength), ':', process[field]
+		print '-' * 40
+	return
+
+def main ():
+	processCommandLine()
+	querySybase()
+	querySolaris()
+	report()
+	return
+
+if __name__ == '__main__':
+	main()
