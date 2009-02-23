@@ -21,6 +21,7 @@ USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-w <email>][-l <file>][-
 	-s : sleep time between runs (an integer number of minutes)
 	-h : send hourly reports to given email address
 	-d : send daily reports to given email address
+	-D : write daily reports to given directory, files named by date
 	-w : send warning reports as they happen to given email address
 	-l : write all reports to the given log file
 	-n : integer number of runs to do
@@ -33,7 +34,7 @@ USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-w <email>][-l <file>][-
     Notes:
 	1. If the -s option is not specified, the default is to run at
 	fifteen minute intervals.
-	2. At least one of the reporting options (-h, -d, -w, -l) must
+	2. At least one of the reporting options (-h, -d, -D, -w, -l) must
 	be specified.
 	3. A "warning" (-w) is issued when a certain threshold has been
 	crossed, for example:
@@ -73,6 +74,7 @@ HISTO_LOADAVG=False	# boolean; include histogram of load average?
 HISTO_IDLE=False	# boolean; include histogram of idle CPU time?
 HISTO_DB=False		# boolean; include histogram of db connections?
 VERBOSE=False		# boolean; include full data set?
+DAILY_DIR=None		# string; name of directory to write daily logs
 
 # monitoring for reporting:
 
@@ -239,10 +241,11 @@ def bailout (msg, showUsage=False):
 def processCommandLine():
 	global EHOURLY, EDAILY, WARNING, LOG, SLEEPTIME, RUNS_LEFT, RUN_NAME
 	global CONFIG_PATH, HISTO_LOADAVG, HISTO_IDLE, HISTO_DB, VERBOSE
+	global DAILY_DIR
 
 	try:
 		(options, args) = getopt.getopt(sys.argv[1:],
-			's:h:d:w:l:n:m:c:aiyv')
+			's:h:d:D:w:l:n:m:c:aiyv')
 	except getopt.GetoptError:
 		bailout ('Improper command-line option(s)', True)
 
@@ -284,6 +287,10 @@ def processCommandLine():
 			except:
 				bailout ('Cannot write to log file: %s' % LOG,
 					True)
+		elif option == '-D':
+			if not os.path.exists (value):
+				bailout("Directory doesn't exist: %s" % value)
+			DAILY_DIR = value
 		elif option == '-a':
 			HISTO_LOADAVG = True
 		elif option == '-i':
@@ -298,8 +305,8 @@ def processCommandLine():
 	if len(args) > 0:
 		bailout ('Too many command-line arguments', True)
 
-	if not (EHOURLY or EDAILY or WARNING or LOG):
-		bailout ('At least one of -h, -d, -w, or -l must be used',
+	if not (EHOURLY or EDAILY or WARNING or LOG or DAILY_DIR):
+		bailout ('At least one of -h, -d, -D, -w, or -l must be used',
 			True)
 	return
 
@@ -454,6 +461,7 @@ def finalReport():
 
 	logMessage (report)
 	sendMessage (report, 'Final Report for Fixed Number of Runs', EHOURLY)
+	logToDir (report)
 	if (EHOURLY != EDAILY):
 		sendMessage (report, 'Final Report for Fixed Number of Runs',
 			EDAILY)
@@ -462,11 +470,12 @@ def finalReport():
 def dailyReport():
 	global DAILY, DAILY_STARTS
 
-	if LOG or EDAILY:
+	if LOG or EDAILY or DAILY_DIR:
 		report = generateReport ('Daily Report', DAILY, DAILY_STARTS)
 
 		logMessage (report)
 		sendMessage (report, 'Daily Report', EDAILY)
+		logToDir (report)
 		
 	DAILY = []
 	DAILY_STARTS = []
@@ -509,6 +518,29 @@ def sendMessage (message, subject, email):
 				% (email, subject))
 	return
 
+def logToDir (message):
+	if not DAILY_DIR:
+		return
+
+	filename = os.path.join (DAILY_DIR, 
+		time.strftime ('%m-%d-%Y.txt', time.localtime(time.time())) )
+
+	if os.path.exists(filename):
+		i = 1
+		temp = '%s.%d' % (filename, i)
+		while os.path.exists(temp):
+			i = i + 1
+			temp = '%s.%d' % (filename, i)
+		filename = temp
+
+	try:
+		fp = open (filename, 'w')
+		fp.write (message + '\n')
+		fp.close()
+	except:
+		logMessage ('Cannot write to %s' % filename)
+	return
+	
 def measure():
 	global HOURLY_STARTS, HOURLY, CONFIG_PATH, WARNINGS
 
