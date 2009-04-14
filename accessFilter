@@ -3,17 +3,17 @@
 # is: a filter through which Apache access.log records can be piped to filter
 # 	out various categories of records (sending others out to stdout)
 
-import threading
+import subprocess
 import pickle
-import Queue
 import sys
 import getopt
 import re
 import runCommand
 import time
 import os
+import socket
 
-USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o <filename>] [-w <int>] [-d][-c]
+USAGE = '''Usage: %s [-r|-s|-i|-j|-C|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o <filename>] [-w <int>] [-d][-c][-x]
 	Serves as a filter for Apache access logs.  Can be used to strip out
 	various types of requests, based on command-line flags.
 
@@ -21,6 +21,8 @@ USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o
 	-r : exclude hits from robots
 	-s : exclude hits from Perl/Python/Java/etc. scripts
 	-i : exclude requests for JPG or GIF images
+	-j : exclude requests for Javascript files
+	-C : exclude requests for CSS files
 	-m : exclude hits from MGI machines
 	-g : exclude hits for GXD pages (often would use this with -v)
 	-v : reverse processing (include only those specified, not exclude)
@@ -30,9 +32,11 @@ USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o
 	-f : specify an input file from which to read (default is stdin)
 	-o : specify an output file to which to write (default is stdout)
     Processing options:
-    	-w : number of filtering threads to use (default is 1; 1-10 allowed)
+    	-w : number of filtering subprocesses use (default is 1; 1-12 allowed)
 	-d : debug mode (write debugging info to stderr)
 	-c : use no-cache mode (resolve all IP addresses without using cache)
+    Internal options:
+    	-x : for internal use only; set up as subprocess for parallelization
     Notes:
     	1. You must use at least one of -r, -s, -i, -m, -g, -b, and -a.
 	2. The -a and -b options do not exclude hits from the specified date.
@@ -42,15 +46,14 @@ USAGE = '''Usage: %s [-r|-s|-i|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o
 	   otherwise been excluded by one or more of the specified criteria.
 	   (You will get the set of all those which would be excluded without
 	   the -v option.)
-	5. The default mode starts two additional threads -- one for filtering
-	   and one for writing output.  Using additional filtering threads
-	   with the -w option should improve performance.  In benchmarking on
-	   two multi-processor machines, using '-w 2' seems to be nearly
-	   optimal for most cases.
+	5. The default mode starts four subprocesses for filtering.  This is
+	   the sweet-spot that showed up during testing, showing a 10-84%%
+	   performance improvement over the prior multi-threaded version
+	   (depending on the data set).  From 1-12 subprocesses is allowed.
 	6. To aid performance, this script uses a temp file in /tmp to track
 	   which IP addresses are flagged as being from robots (or not).  Each
 	   value is cached for up to a week.  Use -c to avoid this cache and
-	   recompute each (and use nslookup for each where needed).
+	   recompute each (and resolve the address for each where needed).
 ''' % sys.argv[0]
 
 INFILE = sys.stdin
@@ -61,14 +64,17 @@ START_TIME = time.time()
 ROBOTS = False		# boolean flags for which records to exclude
 SCRIPTS = False
 IMAGES = False
+JAVASCRIPT = False
+CSS = False
 MGI = False
 GXD = False
 
 NO_CACHE = False
 AFTER_DATE = None
 BEFORE_DATE = None
-THREAD_COUNT = 1
+THREAD_COUNT = 4
 DEBUG = False
+SUBPROCESS = False
 
 REVERSE = False
 
@@ -141,10 +147,11 @@ def userDate (s):
 def processCommandLine():
 	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
 	global AFTER_DATE, BEFORE_DATE, THREAD_COUNT, DEBUG, NO_CACHE
+	global JAVASCRIPT, CSS, SUBPROCESS
 
 	try:
 		options, args = getopt.getopt (sys.argv[1:],
-			'rsimgvf:o:a:b:w:dc')
+			'rsimgvxf:o:a:b:w:dcjC')
 	except getopt.GetoptError:
 		bailout ('Invalid command-line flag(s)')
 
@@ -156,6 +163,8 @@ def processCommandLine():
 			ROBOTS = True
 		elif option == '-s':
 			SCRIPTS = True
+		elif option == '-x':
+			SUBPROCESS = True
 		elif option == '-i':
 			IMAGES = True
 		elif option == '-m':
@@ -176,21 +185,26 @@ def processCommandLine():
 			AFTER_DATE = userDate (value)
 		elif option == '-b':
 			BEFORE_DATE = userDate (value)
+		elif option == '-j':
+			JAVASCRIPT = True
+		elif option == '-C':
+			CSS = True
 		elif option == '-g':
 			GXD = True
 		elif option == '-w':
 			THREAD_COUNT = int(value)
-			if THREAD_COUNT < 1 or THREAD_COUNT > 10:
-				bailout ('Thread count (-w) must be ' + \
-					'from 1 to 10')
+			if THREAD_COUNT < 1 or THREAD_COUNT > 12:
+				bailout ('Subprocess count (-w) must be ' + \
+					'from 1 to 12')
 		elif option == '-d':
 			DEBUG = True
 		elif option == '-c':
 			NO_CACHE = True
 
 	if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
-			BEFORE_DATE or AFTER_DATE):
-		bailout ('Must use at least one of -r, -s, -i, -m, -g, -a, or -b')
+			BEFORE_DATE or AFTER_DATE or JAVASCRIPT or CSS):
+		bailout ('Must use at least one of -r, -s, -i, -j, ' + \
+			'-C, -m, -g, -a, or -b')
 	return
 
 def closeFiles():
@@ -228,9 +242,12 @@ NAME_RE = re.compile ('Name: *(.*)')
 
 ROBOT_AGENT = {}
 SCRIPT_AGENT = {}
+NEW_ROBOTS = []
+BOT_REPORTS = {}
 
 def isRobot (ip, agentLower):
 	global ROBOT_IP, NUMERIC_RE, NAME_RE, ROBOT_TIMESTAMP, ROBOT_AGENT
+	global NEW_ROBOTS
 
 	if ROBOT_IP.has_key(ip):
 		# if we know this is a robot based on IP address, just report
@@ -243,27 +260,30 @@ def isRobot (ip, agentLower):
 	else:
 		address = ip
 
-		# if is numeric address need to resolve to name using nslookup
+		# if is numeric address, we need to resolve to name 
 		# (if possible)
 
 		if NUMERIC_RE.match(ip):
-			(stdout, stderr, exitCode) = runCommand.runCommand (
-				'nslookup %s' % ip)
+			address = socket.getfqdn(ip)
 
-			lines = stdout.split ('\n')
-			if (len(lines) >= 4) and (lines[3].find('Name') != -1):
-				match = NAME_RE.search (lines[3])
-				if match:
-					address = match.group(1)
+#			(stdout, stderr, exitCode) = runCommand.runCommand (
+#				'nslookup %s' % ip)
+#			lines = stdout.split ('\n')
+#			if (len(lines) >= 4) and (lines[3].find('Name') != -1):
+#				match = NAME_RE.search (lines[3])
+#				if match:
+#					address = match.group(1)
 
 		for tag in ROBOT_TAGS:
 			if address.find (tag) != -1:
 				ROBOT_IP[ip] = True
 				ROBOT_TIMESTAMP[ip] = time.time()
+				NEW_ROBOTS.append ( (ip, 1) )
 				return True
 
 		ROBOT_IP[ip] = False
 		ROBOT_TIMESTAMP[ip] = time.time()
+		NEW_ROBOTS.append ( (ip, 0) )
 
 	# check user agent
 
@@ -330,6 +350,20 @@ def keepLine (line):
 				output = False
 			elif SCRIPTS and isScript(agent):
 				output = False
+		else:
+			# no agent field, but we can still check the IP
+			if ROBOTS and isRobot(fields[0], ''):
+				output = False
+
+	if output and JAVASCRIPT:
+		if numFields >= 7:
+			if fields[6][-3:] == '.js':
+				output = False
+
+	if output and CSS:
+		if numFields >= 7:
+			if fields[6][-4:] == '.css':
+				output = False
 
 	if output and MGI:
 		if numFields >= 1:
@@ -353,119 +387,187 @@ def keepLine (line):
 		output = not output
 	return output
 
-class Filter (threading.Thread):
-	def __init__ (self, name, inQueue, outQueue, doneQueue):
-		threading.Thread.__init__ (self)
-		self.name = name
-		self.inQueue = inQueue
-		self.outQueue = outQueue
-		self.doneQueue = doneQueue
-		self.count = 0
-		return
-	def run (self):
-		debug ('started %s' % self.name)
-		while True:
-			try:
-				(lineNum, line) = self.inQueue.get (True, 1)
-				self.outQueue.put ( (lineNum, line,
-					keepLine(line) ) )
-				self.count = self.count + 1
-			except Queue.Empty:
-				# if no item appears within 1 second, check to
-				# see if we have received a "done" signal; if
-				# so, exit the thread; if not, sleep a bit and
-				# try again
+QUIT = '*quit*'
+REPORT = '*report*'
 
-				if not self.doneQueue.empty():
-					debug ('%s finished %d lines' % (
-						self.name, self.count) )
-					return
-				debug ('%s waiting...' % self.name)
-				time.sleep (0.1)
-		return
+def write (outQueue):
+	global NEW_ROBOTS
+	done = False
 
-class Writer (threading.Thread):
-	def __init__ (self, outQueue, fp, doneQueue):
-		threading.Thread.__init__ (self)
-		self.outQueue = outQueue
-		self.fp = fp
-		self.doneQueue = doneQueue
-		self.waiting = {}
-		self.nextLine = 0
-		return
-	def write (self):
-		while self.waiting.has_key(self.nextLine):
-			(num, line, keep) = self.waiting[self.nextLine]
-			if keep:
-				self.fp.write (line)
-			del self.waiting[self.nextLine]
-			self.nextLine = self.nextLine + 1
-		return
-	def run (self):
-		debug ('started writer thread')
-		while True:
-			try:
-				nlk = self.outQueue.get (True, 1)
-				self.waiting[nlk[0]] = nlk
-				if nlk[0] == self.nextLine:
-					self.write ()
-			except Queue.Empty:
-				# check for a "done" signal; if so, exit the
-				# thread; if not, sleep and try again
-				if not self.doneQueue.empty():
-					return
-				debug ('writer thread waiting...')
-				time.sleep (0.1)
-		return
+	for (ip, flag) in NEW_ROBOTS:
+		OUTFILE.write ('*%s %s*\n' % (ip, flag))
 
-def filter():
-	global INFILE, OUTFILE
+	NEW_ROBOTS = []
+	OUTFILE.flush()
 
-	outQueue = Queue.Queue()
-	doneQueue = Queue.Queue()
-	doneQueue2 = Queue.Queue()
-	dataQueue = Queue.Queue()
+	for line in outQueue:
+		OUTFILE.write(line)
+		OUTFILE.write ('\n')
+	OUTFILE.flush()
+	return
 
-	writerThread = Writer(outQueue, OUTFILE, doneQueue2)
+def subprocFilter():
+	outQueue = []
 
-	filters = []
-	dataQueues = []
+	OUTFILE.write(REPORT + '\n')
+	OUTFILE.flush()
 
-	for i in range(0, THREAD_COUNT):
-#		dataQueues.append (Queue.Queue())
-		filters.append (Filter ('filtering thread %d' % i,
-			dataQueue, outQueue, doneQueue))
-#			dataQueues[-1], outQueue, doneQueue))
-		filters[-1].start()
+	line = INFILE.readline().rstrip()
+	while line:
+		if (line[0] != '*') or (line[-1] != '*'):
+			if keepLine(line):
+				outQueue.append (line)
+		elif line.startswith(QUIT):
+			return
+		elif line.startswith(REPORT):
+			outQueue.append (REPORT)
+			write (outQueue)
+			outQueue = []
+		else:
+			items = line[1:-1].split(' ')
+			ip = items[0]
+			code = (items[1] == '1')
 
-	writerThread.start()
+			if not ROBOT_IP.has_key(ip):
+				ROBOT_IP[ip] = code
+				ROBOT_TIMESTAMP[ip] = time.time()
 
+		line = INFILE.readline().rstrip()
+	return
+
+def addWorker (processes):
+	skipnext = False
+	subargs = []
+	for item in sys.argv:
+		if item in ('-f', '-o'):
+			skipnext = True
+		elif skipnext:
+			skipnext = False
+		else:
+			subargs.append (item)
+
+	proc = subprocess.Popen (subargs + ['-x'],
+		stdin=subprocess.PIPE,
+		stdout=subprocess.PIPE)
+	processes.append (proc)
+	return proc
+
+def subprocIO (buckets, processes, procRange):
+	# gather any existing results, then send out the new buckets
+
+	global OUTFILE, ROBOT_IP, ROBOT_TIMESTAMP, BOT_REPORTS
+
+	debug ('send buckets: %s' % str(map(len,buckets)))
+
+	for i in procRange:
+		# collect a new set of isRobot flags from this process
+		BOT_REPORTS[i] = []
+
+		process = processes[i]
+
+		# get output from previous run
+		line = process.stdout.readline()
+
+		ct = 0
+
+		# continue until we reach the REPORT termination flag
+		while not line.startswith(REPORT):
+
+			# regular log lines get written out
+			if (line[0] != '*'):
+				OUTFILE.write(line)
+				ct = ct + 1
+
+			# is-robot flag lines get parsed and remembered
+			else:
+				items = line[1:-2].split(' ')
+				ip = items[0]
+				code = (items[1] == '1')
+
+				ROBOT_IP[ip] = code
+				ROBOT_TIMESTAMP[ip] = time.time()
+				BOT_REPORTS[i].append ( (ip, items[1]) )
+
+			line = process.stdout.readline()
+
+		debug ('proc %d sent %d lines, %d bot flags' % \
+			(i, ct, len(BOT_REPORTS[i]) ))
+		OUTFILE.flush()
+
+		# send input to subprocesses
+
+		# if no more lines waiting in bucket, we're done with this one
+		if not buckets[i]:
+			continue
+
+		# send along is-robot flags we collected last round
+		for (procid, robots) in BOT_REPORTS.items():
+			if procid == i:
+				continue
+			for (ip, flag) in robots:
+				process.stdin.write ('*%s %s*\n' % (ip, flag))
+			process.stdin.flush()
+
+		# send new log records
+		for line in buckets[i]:
+			process.stdin.write (line)
+		process.stdin.flush()
+
+		# send flag requesting a report for those records
+		process.stdin.write (REPORT + '\n')
+		process.stdin.flush()
+
+		# reset this bucket
+		buckets[i] = []
+		debug ('sent lines to proc %d' % i)
+	return
+
+def filter(procCount = 5):
+	global INFILE 
+
+	procRange = range(0, procCount)
+	processes = []
+	buckets = []
+
+	for i in procRange:
+		addWorker(processes)
+		buckets.append ([])
+
+	ct = 0
 	i = 0
+	cacheSize = 1000
+	bucketSize = cacheSize / procCount
+	maxBucket = procCount - 1
+
 	line = INFILE.readline()
 	while line:
-#		queue = dataQueues[i % THREAD_COUNT]
+		pn = min(maxBucket, ct / bucketSize)
+		buckets[pn].append (line)
 
-		# if the queue is getting large, take a small break
-		if dataQueue.qsize() > 10000:
-			debug ('main thread waiting...')
-			time.sleep(0.25)
-
-		dataQueue.put ( (i, line) )
 		i = i + 1
+		ct = ct + 1
+		if ct >= cacheSize:
+			subprocIO (buckets, processes, procRange)
+			ct = 0
+			debug ('total lines sent: %d' % i)
+
 		line = INFILE.readline()
 
-	doneQueue.put ("done")
+	debug ('finished reading data')
 
-	i = 0
-	for filter in filters:
-		filter.join()
-		debug ('ended thread %d' % i)
-		i = i + 1
+	if ct > 0:
+		# send final buckets
+		subprocIO (buckets, processes, procRange)
 
-	# only end the writer thread after all the filters have ended
-	doneQueue2.put ("done")
-	writerThread.join()
-	debug ('ended writer thread')
+	# gather final results
+	subprocIO (buckets, processes, procRange)
+	
+	for process in processes:
+		process.stdin.write (QUIT + '\n')
+		process.stdin.flush()
+		process.stdin.close()
+		process.wait()
+		debug ('subprocess %d ended' % process.pid)
 	return
 
 def loadCache (file):
@@ -520,10 +622,15 @@ def main():
 	processCommandLine()
 	if not NO_CACHE:
 		loadCache (robotCache)
-	filter()
-	closeFiles()
-	if not NO_CACHE:
-		saveCache (robotCache)
+
+	if not SUBPROCESS:
+		filter(THREAD_COUNT)
+		closeFiles()
+		if not NO_CACHE:
+			saveCache (robotCache)
+		debug ('main process ended')
+	else:
+		subprocFilter()
 
 if __name__ == '__main__':
 	main()
