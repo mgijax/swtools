@@ -496,22 +496,22 @@ def subprocIO (buckets, processes, procRange):
 
 		# send input to subprocesses
 
-		# if no more lines waiting in bucket, we're done with this one
-		if not buckets[i]:
-			continue
+		# if more lines waiting in bucket, send next set of inputs
+		if buckets[i]:
 
-		# send along is-robot flags we collected last round
-		for (procid, robots) in BOT_REPORTS.items():
-			if procid == i:
-				continue
-			for (ip, flag) in robots:
-				process.stdin.write ('*%s %s*\n' % (ip, flag))
+			# send along is-robot flags we collected last round
+			for (procid, robots) in BOT_REPORTS.items():
+				if procid == i:
+					continue
+				for (ip, flag) in robots:
+					process.stdin.write ('*%s %s*\n' % (
+						ip, flag))
+				process.stdin.flush()
+
+			# send new log records
+			for line in buckets[i]:
+				process.stdin.write (line)
 			process.stdin.flush()
-
-		# send new log records
-		for line in buckets[i]:
-			process.stdin.write (line)
-		process.stdin.flush()
 
 		# send flag requesting a report for those records
 		process.stdin.write (REPORT + '\n')
