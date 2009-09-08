@@ -1,0 +1,389 @@
+#!/usr/local/bin/python
+
+# accepts on stdin lines beginning with IP addresses (as from an Apache access
+# log), uses subprocesses to resolve those numeric addresses to their fully
+# qualified domain names, then writes the altered lines in the original order
+# to stdout
+
+import os
+import sys
+import getopt
+import time
+import subprocess
+import re
+import socket
+import pickle
+
+USAGE = '''Usage: %s [-f <file>][-o <file>][-w <int>][-c][-x][-d]
+    Purpose:
+    	Assumes input lines begin with IP addresses, and converts any numeric
+	addresses to their fully qualified domain names.  Writes lines in the
+	original order, but with addresses changed to the FQDN equivalents.
+    Options:
+    	-f : specifies an input file (default is stdin)
+	-o : specifies an output file (default is stdout)
+	-w : specifies the number of worker subprocesses to use (default 6)
+	-c : use no-cache mode (resolve all addresses without using cache
+	-d : run in debug mode
+    Internal options:
+    	-x : for internal use only; used to run as a subprocess
+    Notes:
+    	1. To aid performance, this script uses a temp file in /tmp to cache
+	   the mapping from numeric IP addresses to fully qualified domain
+	   names.  These are cached individually for up to a week.  Using the
+	   -c flag will avoid this cache.
+''' % sys.argv[0]
+
+INPUT = sys.stdin
+OUTPUT = sys.stdout
+SUBPROCESS_COUNT = 6
+CACHING = True
+IS_SUBPROCESS = False 
+
+DEBUG = False
+START_TIME = time.time()
+LAST_TIME = START_TIME
+
+CACHE = {}			# numeric IP -> (FQDN, time retrieved)
+CACHE_PATH = '/tmp/resolveIP.cache'
+
+QUIT = '*quit*'
+REPORT = '*report*'
+
+REPORTS = {}
+NEW_IP = []
+
+NUMERIC_RE = re.compile ('^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+
+def debug (s):
+	global LAST_TIME
+
+	if not DEBUG:
+		return
+
+	myTime = time.time()
+	sys.stderr.write ('%8.2f %8.2f %s\n' % (myTime - START_TIME,
+		myTime - LAST_TIME, s))
+	LAST_TIME = myTime
+	return
+
+def bailout (s, showUsage = True):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % s)
+	sys.exit(1)
+
+def processCommandLine():
+	global INPUT, OUTPUT, CACHING, IS_SUBPROCESS
+	global SUBPROCESS_COUNT, DEBUG
+
+	try:
+		(options, args) = getopt.getopt (sys.argv[1:], 'f:o:w:cxd')
+	except getopt.GetoptError, message:
+		bailout ('Invalid command-line')
+
+	if args:
+		bailout ('Extra command-line arguments are not allowed')
+
+	for (option, value) in options:
+		if option == '-f':
+			try:
+				INPUT = open (value, 'r')
+			except:
+				bailout ('Cannot read from: %s' % value)
+		elif option == '-o':
+			try:
+				OUTPUT = open (value, 'w')
+			except:
+				bailout ('Cannot write to: %s' % value)
+		elif option == '-w':
+			try:
+				SUBPROCESS_COUNT = int(value)
+			except:
+				bailout ('Invalid integer: %s' % value)
+		elif option == '-c':
+			CACHING = False
+		elif option == '-x':
+			IS_SUBPROCESS = True
+		elif option == '-d':
+			DEBUG = True
+	debug ('Processed command-line')
+	return
+
+def cleanCache():
+	global CACHE
+
+	if CACHING:
+		# 7 days of seconds
+		weekAgo = START_TIME - 7 * 24 * 60 * 60	
+		cacheItems = CACHE.items()
+
+		for (ip, (fqdn, age)) in cacheItems:
+			if age < weekAgo:
+				del CACHE[ip] 
+		debug ('Cleaned cache: %d left' % len(CACHE))
+	return
+
+def loadCache():
+	global CACHE
+
+	if CACHING:
+		try:
+			if os.path.exists(CACHE_PATH):
+				fp = open (CACHE_PATH, 'r')
+				CACHE = pickle.load (fp)
+				fp.close()
+				debug ('Loaded cache: %d entries' % \
+					len(CACHE))
+		except:
+			CACHE = {} 
+			debug ('Failed to load cache')
+	return
+
+def saveCache():
+	if CACHING:
+		try:
+			fp = open (CACHE_PATH, 'w')
+			pickle.dump (CACHE, fp, 0)
+			fp.close()
+			debug ('Saved cache: %d entries' % len(CACHE))
+		except:
+			debug ('Failed to save cache')
+	return
+
+def createWorkers():
+	pieces = [ sys.argv[0], '-x' ]
+	if not CACHING:
+		pieces.append ('-c')
+
+	processes = []
+	for i in range(0, SUBPROCESS_COUNT):
+		proc = subprocess.Popen (pieces, stdin=subprocess.PIPE,
+			stdout=subprocess.PIPE, bufsize=600000)
+		processes.append (proc)
+		debug ('Started subprocess %d' % proc.pid)
+	return processes
+
+def subprocessWrite(outQueue):
+	global NEW_IP
+
+	for ip in NEW_IP:
+		fqdn = CACHE[ip][0]
+		OUTPUT.write ('*%s %s*\n' % (ip, fqdn))
+
+	NEW_IP = []
+	OUTPUT.flush()
+
+	for line in outQueue:
+		OUTPUT.write(line)
+		OUTPUT.write('\n')
+	OUTPUT.flush()
+	return
+
+def convertLine (line):
+	global NEW_IP, CACHE
+
+	p = line.find(' ')
+	if p <= 0:
+		return line
+
+	ip = line[:p]
+	remainder = line[p:]
+
+	if CACHE.has_key(ip):
+		return CACHE[ip][0] + remainder
+
+	if not NUMERIC_RE.match(ip):
+		return line
+
+	fqdn = socket.getfqdn(ip)
+
+	NEW_IP.append (ip)
+	CACHE[ip] = (fqdn, 0)
+
+	return fqdn + remainder
+
+def subprocessMain():
+	global CACHE
+
+	loadCache()
+
+	outQueue = []
+
+	OUTPUT.write(REPORT + '\n')
+	OUTPUT.flush()
+
+	while True:
+	    lines = []
+	    line = INPUT.readline().rstrip()
+	    while line:
+			lines.append (line)
+			if line.startswith(REPORT) or \
+				line.startswith(QUIT):
+				break
+			line = INPUT.readline().rstrip()
+
+	    for line in lines:
+		if (line[0] != '*') or (line[-1] != '*'):
+			outQueue.append (convertLine (line))
+		elif line.startswith(QUIT):
+			return
+		elif line.startswith(REPORT):
+			outQueue.append (REPORT)
+			subprocessWrite (outQueue)
+			outQueue = []
+		else:
+			items = line[1:-1].split(' ')
+			ip = items[0]
+			fqdn = items[1]
+
+			CACHE[ip] = (fqdn, 0)
+	return
+
+def subprocIO (buckets, processes):
+	# gather any existing results, then send out new buckets of input
+
+	global OUTPUT, CACHE, REPORTS
+
+	myTime = time.time()
+
+	i = 0
+	for process in processes:
+		# get output from subprocess
+
+		line = process.stdout.readline()
+		ct = 0
+		REPORTS[i] = []
+
+		# continue until we reach the REPORT termination flag
+		returned = []
+		while not line.startswith(REPORT):
+			returned.append (line)
+			line = process.stdout.readline()
+
+		for line in returned:
+			# write out regular log lines
+			if (line[0] != '*'):
+				OUTPUT.write(line)
+				ct = ct + 1
+
+			# note the reporting of IP/FQDN mappings
+			else:
+				items = line[1:-2].split(' ')
+				ip = items[0]
+				fqdn = items[1]
+
+				CACHE[ip] = (fqdn, myTime)
+				REPORTS[i].append ( (ip, fqdn) )
+
+		if ct > 0:
+			debug ('Got %d lines, %d FQDN from %d' % (ct,
+				len(REPORTS[i]), process.pid))
+
+		# send input to subprocess
+
+		# if more work to do, send next set of inputs
+		if buckets[i]:
+
+			c = 0
+
+			# send along IP/FQDN mappings from other workers
+			for (j, report) in REPORTS.items():
+				if i == j:
+					continue
+				for (ip, fqdn) in report:
+					process.stdin.write ('*%s %s*\n' % (
+						ip, fqdn))
+					c = c + 1
+				process.stdin.flush()
+
+			if c > 0:
+				debug ('Sent %d IP/FQDN mappings to %d' % (c,
+					process.pid))
+
+			# send new log records
+			for line in buckets[i]:
+				process.stdin.write(line)
+			process.stdin.flush()
+
+			debug ('Sent %d lines to %d' % (len(buckets[i]),
+				process.pid))
+
+		# send flag requesting a report for those records
+		process.stdin.write (REPORT + '\n')
+		process.stdin.flush()
+		debug ('Sent report flag to %d' % process.pid)
+
+		# reset this bucket
+		buckets[i] = []
+
+		i = i + 1
+	return
+
+def controllerMain():
+	loadCache()
+	cleanCache()
+	saveCache()
+
+	processes = createWorkers()
+	buckets = []
+	for process in processes:
+		buckets.append ([])
+	
+	ct = 0
+	i = 0
+	cacheSize = 1000
+	bucketSize = cacheSize / SUBPROCESS_COUNT
+	maxBucket = SUBPROCESS_COUNT - 1
+
+	line = INPUT.readline()
+	while line:
+		pn = min(maxBucket, ct / bucketSize)
+		buckets[pn].append (line)
+
+		i = i + 1
+		ct = ct + 1
+		if ct >= cacheSize:
+			subprocIO (buckets, processes)
+			ct = 0
+			debug ('Total lines sent: %d' % i)
+
+		line = INPUT.readline()
+
+	debug ('Finished reading data')
+
+	if ct > 0:
+		# send final buckets
+		subprocIO (buckets, processes)
+
+	# gather final results
+	subprocIO (buckets, processes)
+
+	for process in processes:
+		process.stdin.write (QUIT + '\n')
+		process.stdin.flush()
+		process.stdin.close()
+		process.wait()
+		debug ('Subprocess ended: %d' % process.pid)
+
+	if INPUT != sys.stdin:
+		INPUT.close()
+		debug ('Closed input file')
+	OUTPUT.flush()
+	if OUTPUT != sys.stdout:
+		OUTPUT.close()
+		debug ('Closed output file')
+	saveCache()
+	debug ('Main program ended')
+	return
+
+def main():
+	processCommandLine()
+	if IS_SUBPROCESS:
+		subprocessMain()
+	else:
+		controllerMain()
+	return
+
+if __name__ == '__main__':
+	main()
