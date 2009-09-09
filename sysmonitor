@@ -1,17 +1,23 @@
 #!/usr/local/bin/python
 
-# does performance monitoring of various server components with emailed
-# reports
+# Does performance monitoring of various server components with reports
+# emailed or written to a directory (see USAGE below).  Updated 7/30/09 to
+# work with both Solaris 8 and 10.
 
 import sys
 import re
 import time
 import getopt
 import os
-import Configuration
-import db
-import runCommand
-import mgi_utils
+import Configuration	# for Configuration object
+import runCommand	# for runCommand() function
+import mgi_utils	# for send_Mail() function
+
+try:
+	import db
+	DB_ENABLED = True
+except:
+	DB_ENABLED = False
 
 USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-w <email>][-l <file>][-n <int>][-m <name>][-c <config file>][-a][-i][-y][-v]
     Purpose:
@@ -38,8 +44,8 @@ USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-w <email>][-l <file>][-
 	be specified.
 	3. A "warning" (-w) is issued when a certain threshold has been
 	crossed, for example:
-		* less than 10%% idle CPU time
-		* more than 50 simultaneous sybase connections
+		* less than 5%% idle CPU time
+		* more than 70 simultaneous sybase connections
 	4. Log files must be unique; they will not be overwritten.
 	5. If the -n flag is not used to specify a number of runs, the default
 	behavior is to run continuously.  (kill the process to stop it)
@@ -150,23 +156,41 @@ def doTop():
 	# one with the CPU measurements
 
 	sections = stdout.split ('last pid:')
-	lines = sections[2].split ('\n')
+
+	# if the above split() worked, we're running on solaris 8
+	if len(sections) >= 3:
+		lines = sections[2].split ('\n')
+	else:
+		# otherwise, we need a different split() for solaris 10
+		sections = stdout.split ('load average')
+
+		# on solaris 10, 'top' doesn't always return the same format,
+		# so handle both
+		if len(sections) > 2:
+			lines = sections[2].split('\n')
+		else:
+			lines = sections[1].split('\n')
+
 	dict = {}
 
 	line1 = extractNumbers(lines[0])
 	line3 = extractNumbers(lines[2])
 
+	# we will always have a first line, so we can just grab those pieces
 	dict['load average  1-min'] = line1[1]
 	dict['load average  5-min'] = line1[2]
 	dict['load average 15-min'] = line1[3]
-	dict['cpu idle %'] = line3[0]
-	dict['cpu user %'] = line3[1]
-	dict['cpu kernel %'] = line3[2]
-	dict['cpu iowait %'] = line3[3]
-	dict['cpu swap %'] = line3[4]
 
-	if dict['cpu idle %'] < 10.0:
-		collectWarning ('CPU less than 5% idle')
+	# on solaris 10, we don't always have a third line, so check first
+	if line3:
+		dict['cpu idle %'] = line3[0]
+		dict['cpu user %'] = line3[1]
+		dict['cpu kernel %'] = line3[2]
+		dict['cpu iowait %'] = line3[3]
+		dict['cpu swap %'] = line3[4]
+
+		if dict['cpu idle %'] < 5.0:
+			collectWarning ('CPU less than 5% idle')
 
 	ct = 0
 	for line in lines[5:]:
@@ -186,6 +210,9 @@ def doUptime():
 	return { 'solaris user sessions' : numbers[5] }
 
 def doSybase():
+	if not DB_ENABLED:
+		return {}
+
 	config = Configuration.Configuration (CONFIG_PATH)
 	try:
 		db.set_sqlLogin (config['DB_USER'], config['DB_PASSWORD'],
