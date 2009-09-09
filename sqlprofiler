@@ -12,9 +12,10 @@ import string
 import time
 import db
 
-USAGE = '''Usage: %s [-S <db server>][-D <database>] [<filename>]
+USAGE = '''Usage: %s [-S <db server>][-D <database>][-n <reps>] [<filename>]
 	-S <db server> : specifies the name of the database server to use
 	-D <database>  : specifies the name of the database within <db server>
+	-n <reps>      : number of repetitions of query set (default is 1)
 	<filename>     : path to file containing SQL commands
 
 	If -S and -D are not used, the environment variables DSQUERY and
@@ -40,8 +41,9 @@ USAGE = '''Usage: %s [-S <db server>][-D <database>] [<filename>]
 
 ###--- globals ---###
 
-timings = []
-rowCounts = []
+timings = []		# [ [timings for cmd 1], [for cmd 2], ... ]
+rowCounts = []		# [ counts cmd 1, for cmd 2, ... ]
+reps = 1		# number of repetitions
 
 ###--- functions ---###
 
@@ -53,8 +55,10 @@ def bailout (s):
 	sys.exit(1)
 
 def processCommandLine():
+	global reps
+
 	try:
-		optlist, args = getopt.getopt (sys.argv[1:], 'D:S:')
+		optlist, args = getopt.getopt (sys.argv[1:], 'D:S:n:')
 	except getopt.GetoptError, message:
 		bailout (message)
 
@@ -76,6 +80,11 @@ def processCommandLine():
 	for (flag, value) in optlist:
 		if flag == '-D':
 			database = value
+		elif flag == '-n':
+			try:
+				reps = int(value)
+			except:
+				bailout ('Invalid value for -n: %s' % value)
 		elif flag == '-S':
 			dsquery = value
 
@@ -178,14 +187,30 @@ def runCommand (cmd):
 def runCommands (commands):
 	global timings, rowCounts
 
+	i = 0
 	for cmd in commands:
 		timing, rowCount = runCommand (cmd)
-		timings.append (timing)
-		rowCounts.append (rowCount)
 
+		if len(timings) > i:
+			timings[i].append (timing)
+		else:
+			timings.append ( [timing] )
+			rowCounts.append (rowCount)
+		i = i + 1
 	return
 
+def average (myList):
+	return 1.0 * sum(myList) / len(myList)
+
 def printTable ():
+	global timings
+
+	averages = map (average, timings)
+	mins = map (min, timings)
+	maxes = map (max, timings)
+
+	timings = averages
+
 	if timings:
 		totalTime = sum(timings)
 		maxTime = max(timings)
@@ -194,6 +219,10 @@ def printTable ():
 		maxTime = 0.0
 
 	perStar = maxTime / 40
+
+	if reps > 1:
+		print 'Averaged for %d runs:' % reps
+		print
 
 	print 'cmd rows returned  elapsed (s)   time histogram (%1.2f per *)'\
 		% perStar
@@ -220,6 +249,18 @@ def printTable ():
 		i = i + 1
 	print
 	print 'total time (s):   %7.2f' % totalTime
+
+	if reps > 1:
+		print
+		print 'cmd min (s) max (s) avg (s)'
+		print '--- ------- ------- -------'
+
+		template = '%3d %7.2f %7.2f %7.2f'
+
+		i = 0
+		while i < len(timings):
+			print template % (i, mins[i], maxes[i], timings[i])
+			i = i + 1
 	return
 
 def printCommands (commands):
@@ -238,7 +279,8 @@ lines = readfile (filename)
 commands = splitLines (lines)
 
 try:
-	runCommands (commands)
+	for i in range(0,reps):
+		runCommands (commands)
 except:
 	print '*** Error: run failed on command %d ***' % len(timings)
 	print
