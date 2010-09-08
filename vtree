@@ -4,6 +4,7 @@ import sys
 import os
 
 SP = '|  '
+NO_CVS = False
 
 def dirSort (parent, l):
 	dirs = []
@@ -30,6 +31,8 @@ def trace (parent, dir, lvl):
 		for f in files:
 			print SP * lvl + f
 		for d in dirs:
+			if NO_CVS and d == 'CVS':
+				continue
 			print SP * lvl + d + '/'
 			trace (fp, d, lvl + 1)
 	except:
@@ -37,6 +40,10 @@ def trace (parent, dir, lvl):
 	return
 
 if __name__ == '__main__':
+	if '-c' in sys.argv:
+		NO_CVS = True
+		sys.argv.remove('-c')
+
 	if len(sys.argv) == 1:
 		dir = '.'
 	else:
