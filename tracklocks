@@ -9,7 +9,7 @@ sys.path.insert (0, '/usr/local/mgi/live/lib/python')
 import os
 import getopt
 import db
-import runCommand
+import subprocess
 import time
 import types
 import mgi_utils
@@ -225,7 +225,7 @@ def querySybase ():
 	return processes, lockSummary, locksByTable, locksBySpid
 
 def processPsOutput (tpl, host, ip, processes):
-	# extract data from the output of runCommand (in tpl, a tuple) for
+	# extract data from the output of subprocess (in tpl, a tuple) for
 	# the given host/ip and update processes
 
 	(stdout, stderr, exitcode) = tpl
@@ -274,7 +274,10 @@ def processPsOutput (tpl, host, ip, processes):
 				pass
 	return
 
+failedHosts = {}
 def querySolaris (processes):
+	global failedHosts
+
 	# bail out if we don't have any host info
 	anyHost = False
 	for (key, process) in processes.items():
@@ -301,17 +304,32 @@ def querySolaris (processes):
 
 	# use rsh to remotely execute ps on solaris boxes, if possible
 	for (ip, host) in hosts.items():
-		if ip and not ip.startswith('209.222'):
-			# don't try to rsh to any non-MGI servers
-			continue
-		elif ip:
-			processPsOutput (runCommand.runCommand (
-				'rsh %s "ps -aef"' % ip), host, ip,
-				processes)
+		if ip and ip.startswith('209.222'):
+			addr = ip
 		elif host:
-			processPsOutput (runCommand.runCommand (
-				'rsh %s "ps -aef"' % host), host, host,
-				processes)
+			addr = host
+		else:
+			continue
+
+		# if we already had a failure for this host, skip it
+		if failedHosts.has_key(addr):
+			return
+
+		proc = subprocess.Popen (['/usr/bin/rsh', addr, 'ps -aef' ],
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE)
+		proc.wait()
+
+		exitCode = proc.returncode
+		stdout = proc.stdout.readlines()
+		stderr = proc.stdout.readlines()
+
+		# if we failed, then don't check this host again
+		if exitCode:
+			failedHosts[addr] = True
+
+		processPsOutput ( (stdout, stderr, exitCode), host, addr,
+			processes)
 	return
 
 lookupCache = { ALL : ALL }
