@@ -12,6 +12,7 @@ import db
 import subprocess
 import time
 import types
+import socket
 import mgi_utils
 
 ###--- Global variables ---###
@@ -53,6 +54,12 @@ USAGE = '''Usage: %s -S <db server> [-i <interval>] [-d <duration>] [-e <email>]
 ###--- Functions ---###
 
 def bailout (msg, showUsage=False, isError=True):
+	if not sys.stderr.isatty():
+		fp = open('tracklocks.failure.log', 'w')
+		fp.write (msg)
+		fp.close()
+		sys.exit(1)
+
 	if showUsage:
 		sys.stderr.write (USAGE)
 	if isError:
@@ -99,6 +106,17 @@ def processCommandLine ():
 
 	db.set_sqlLogin ('mgd_public', 'mgdpub', SERVER, 'master')
 	return
+
+nameCache = {}
+def nslookup (ip):
+	global nameCache
+
+	if nameCache.has_key(ip):
+		return nameCache[ip]
+	fqdn = socket.getfqdn(ip)
+	if fqdn:
+		nameCache[ip] = fqdn
+	return fqdn
 
 def querySybase ():
 	# gather what information we can from Sybase
@@ -237,7 +255,10 @@ def processPsOutput (tpl, host, ip, processes):
 		return
 
 	dict = {}
-	lines = stdout.split ('\n')[1:]		# skip header line
+	if type(stdout) == types.ListType:
+		lines = stdout[1:]
+	else:
+		lines = stdout.split ('\n')[1:]		# skip header line
 	for line in lines:
 		fields = line.split()
 		if len(fields) >= 8:
@@ -305,7 +326,7 @@ def querySolaris (processes):
 	# use rsh to remotely execute ps on solaris boxes, if possible
 	for (ip, host) in hosts.items():
 		if ip and ip.startswith('209.222'):
-			addr = ip
+			addr = nslookup(ip)
 		elif host:
 			addr = host
 		else:
@@ -637,4 +658,10 @@ def main ():
 	return
 
 if __name__ == '__main__':
-	main()
+	try:
+		main()
+	except:
+		fp = open('tracklocks.failure.log', 'w')
+		import traceback
+		traceback.print_exc (file = fp)
+		fp.close()
