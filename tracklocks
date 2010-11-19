@@ -529,7 +529,10 @@ def buildTable (header, rows):
 	if FORMAT == 'tab':
 		out.append ('\t'.join(header))
 		for row in rows:
-			out.append ('\t'.join(map(str,row)))
+			if type(row) == types.ListType:
+				out.append ('\t'.join(map(str,row)))
+			else:
+				out.append (row)
 
 	elif FORMAT == 'text':
 		# find the maximum length for each column, excluding rows
