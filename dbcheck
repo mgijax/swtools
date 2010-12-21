@@ -1,0 +1,773 @@
+#!/usr/local/bin/python
+
+# Program: dbcheck
+# Purpose: to provide an easy mechanism for us to do basic sanity checking of
+#	a single database or to compare between two databases
+# Usage: see USAGE variable below
+
+###--- Imports ---###
+
+import sys
+sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+import ignoreDeprecation
+import rcdlib
+import getopt
+import time
+import mgi_utils
+
+# find interfaces file on AMD boxes (for FreeTDS)
+import os
+if not os.environ.has_key('SYBASE'):
+	os.environ['SYBASE'] = '/opt/sybase/15'
+
+###--- Usage statement ---###
+
+USAGE = '''Usage: %s [-d][-s] <Rcd-formatted input file>
+	Allows you to define in an Rcd-formatted file a set of tests to run
+	against one or two databases to do basic sanity checking.  This input
+	file will also define your database connection parameters and
+	reporting options.  The path to the file must be specified on the
+	command-line.  You can get a starter file to modify by using -s.
+
+	Parameters:
+		-d : run in debug mode (writes info to stderr)
+		-s : write a sample Rcd-formatted file to stdout
+''' % sys.argv[0]
+
+###--- Load database-access modules ---###
+
+LOADED_SYBASE = False		# flag as True any which import successfully
+LOADED_FREETDS = False
+LOADED_MYSQL = False
+LOADED_POSTGRES = False
+
+try:				# MGI's standard Sybase driver
+	import db
+	LOADED_SYBASE = True
+except:
+	pass
+
+if not LOADED_SYBASE:
+	try:			# FreeTDS Sybase driver for AMD boxes
+		import Sybase
+		LOADED_FREETDS = True
+	except:
+		pass
+
+try:				# standard MySQL driver
+	import MySQLdb
+	LOADED_MYSQL = True
+except:
+	pass
+
+try:				# standard Postgres driver
+	import psycopg2
+	LOADED_POSTGRES = True
+except:
+	pass
+
+###--- Globals ---###
+
+DEBUG = False		# run in debug mode?
+
+SOURCE = 'SOURCE'	# constants for which database to use to execute query
+TARGET = 'TARGET'
+
+MYSQL = 'mysql'		# constants for type of source/target database
+POSTGRES = 'postgres'
+SYBASE = 'sybase'
+
+SINGLE = None		# all to be populated from rcd file given on cmd line
+DUAL = None
+SOURCE_TABLES = None
+TARGET_TABLES = None
+LESS_THAN = None
+GREATER_THAN = None
+EQUALS = None
+NOT_EQUALS = None
+
+MAX_ERROR_COUNT = None	# optionally populated from rcd file given on cmd line
+REPORT_EMAIL = None
+ERROR_EMAIL = None
+
+SOURCE_DB = None	# list of SOURCE_* database parameters
+TARGET_DB = None	# list of TARGET_* database parameters
+
+ERRORS = []		# list of error messages
+SOURCE_TABLE_LIST = []
+TARGET_TABLE_LIST = []
+
+START_TIME = time.time()
+
+###--- Begin Sample Rcd file ---###
+
+SAMPLE = '''
+# The top part of this file is basic configuration information, including
+# database connection parameters and reporting data.  The lower part of the
+# file includes the tests.
+
+#-----------------------------------------------------------------------------
+# basic configuration data:  (edit as needed)
+#
+# source database
+
+SOURCE_TYPE = sybase		# sybase, mysql, or postgres
+SOURCE_SERVER = DEV1_MGI	# Sybase server name or MySQL/Postgres host
+SOURCE_NAME = mgd_wi1		# name of the database
+SOURCE_USER = mgd_public	# database username
+SOURCE_PASSWORD = mgdpub	# database username's password
+
+# target database (see source database section for options)
+
+TARGET_TYPE = postgres
+TARGET_SERVER = cardolan
+TARGET_NAME = fe_backend
+TARGET_USER = mgddbo
+TARGET_PASSWORD = mgddbo
+
+# maximum number of errors encountered before quitting (comment this line out
+# for no limit)
+# MAX_ERROR_COUNT = 10
+
+# to whom should a report be emailed, whether errors were found or not?
+# (comment this line out for no general reporting email)
+# REPORT_EMAIL = jsb@informatics.jax.org
+
+# to whom should a report be emailed if errors were found? (comment this line
+# out for no error-reporting email)
+# ERROR_EMAIL = jsb@informatics.jax.org
+
+#-----------------------------------------------------------------------------
+# Each record in the lower part of this file defines one sanity-checking test
+# to be run against one or two databases.  (We can test either a single
+# database or do a comparison of query results from two databases.)
+
+#-----------------------------------------------------------------------------
+# Constants values to be used in defining MODE, TABLE_SET, and COMPARISON
+# fields:  (do not edit these)
+
+# values for MODE:
+SINGLE = 'single database'
+DUAL = 'dual databases'
+
+# values for TABLE_SET:
+#	if we want a test to loop over the set of tables from one of the
+#	databases, which set?  (also fills each table name in for %s in the
+#	query and message?)
+SOURCE_TABLES = 'source tables'
+TARGET_TABLES = 'target tables'
+
+# values for COMPARISON when comparing to a count on a single-database test:
+#	when testing a count, what comparison against the target value do we
+#	use?  (if the chosen comparison is not true for the two values, then
+#	the test fails)
+LESS_THAN = 'less than'
+GREATER_THAN = 'greater than'
+EQUALS = 'equals'
+NOT_EQUALS = 'not equals'
+
+#-----------------------------------------------------------------------------
+# Single database tests are run against the target database.
+#
+# Tests against a single database must have the following items declared:
+#	ID - unique value to identify the particular test in this file
+#	MODE - SINGLE
+#	TARGET_SQL - SQL command returning a single integer value
+#	VALUE - integer value to which to compare the query result
+#	COMPARISON - type of comparison to use: LESS_THAN, GREATER_THAN,
+#		EQUALS, or NOT_EQUALS
+# Optional items include:
+# 	TABLE_SET - should only be TARGET_TABLES for single database tests
+#	MESSAGE - message to send if test fails (can include %s for table
+#		name, if TABLE_SET is specified).  If no message is specified
+#		the system will generate one.
+
+#-----------------------------------------------------------------------------
+# Dual database tests are used to compare results of queries against the
+#	source database and the target database.  It is assumed that both
+#	queries return a single integer count and that those two counts must
+#	be equal for a successful test.
+#
+# Tests against both databases must have the following items declared:
+#	ID - unique value to identify the particular test in this file
+#	MODE - DUAL
+#	TARGET_SQL - SQL command returning a single integer value from the
+#		target database
+# optional items include:
+# 	TABLE_SET - can be either SOURCE_TABLES or TARGET_TABLES, depending
+#		on which set of tables we want the test to loop over
+#	MESSAGE - message to send if test fails (can include %s for table
+#		name, if TABLE_SET is specified).  If no message is specified
+#		the system will generate one.
+#	SOURCE_SQL - if we need to run different SQL against the source
+#		database, then we can define that alternate command here
+
+#-----------------------------------------------------------------------------
+# Sample Tests: (edit and add from here on)
+
+# ensure there are no empty tables in the target database
+[
+ID=no empty tables
+MODE=${SINGLE}
+TABLE_SET=${TARGET_TABLES}
+TARGET_SQL=select count(1) from %s
+COMPARISON=${GREATER_THAN}
+VALUE=0
+MESSAGE=Table %s is empty in the target database.
+]
+
+# ensure that row counts match between the source and target database
+[
+ID=matching counts
+MODE=${DUAL}
+TABLE_SET=${SOURCE_TABLES}
+TARGET_SQL=select count(1) from %s
+MESSAGE=Table %s has different row counts in the source and target databases.
+]
+'''
+
+###--- End Sample Rcd file ---###
+
+###--- Functions ---###
+
+def bailout (message, showUsage = True):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % message)
+	sys.exit(1)
+
+def debug (message):
+	if DEBUG:
+		t = time.time() - START_TIME
+		sys.stderr.write ('debug : %10.3f sec : %s\n' % (t, message)) 
+	return
+
+def processCommandLine():
+	# processes the command-line and returns an RcdFile object if the
+	# command-line parameters were valid
+
+	global DEBUG
+
+	try:
+		options, args = getopt.getopt (sys.argv[1:], 'sd')
+	except:
+		bailout ('Invalid command-line')
+
+	# look for command-line flags
+
+	if len(options) > 0:
+		for (option, value) in options:
+			if option == '-s':
+				print SAMPLE
+				sys.exit(0)
+			elif option == '-d':
+				DEBUG = True
+			else:
+				bailout ('Flag %s not handled' % option)
+
+	# check for a single input filename
+
+	if len(args) == 0:
+		bailout ('Must specify input file on command-line')
+
+	if len(args) > 1:
+		bailout ('Too many command-line parameters')
+
+	# check that the filename is valid
+
+	filename = args[0]
+	if not os.path.exists(filename):
+		bailout ('File (%s) does not exist' % filename)
+
+	try:
+		inputFile = rcdlib.RcdFile (filename, rcdlib.Rcd, 'ID')
+	except:
+		(excType, excValue, excTraceback) = sys.exc_info()
+		bailout (
+		    'File (%s) cannot be parsed as an RcdFile; error: "%s"' \
+			% (filename, excValue))
+
+	return inputFile
+
+def processInputFile (inputFile):
+	# checks that the inputFile contains all required parameters;
+	# fills in certain global variables with values from the file
+
+	global SINGLE, DUAL, SOURCE_TABLES, TARGET_TABLES, LESS_THAN
+	global GREATER_THAN, EQUALS, NOT_EQUALS, MAX_ERROR_COUNT, REPORT_EMAIL
+	global ERROR_EMAIL, SOURCE_DB, TARGET_DB
+
+	# fill in global variables with values from 'inputFile'
+
+	SINGLE = inputFile.getConstant('SINGLE')
+	DUAL = inputFile.getConstant('DUAL')
+	SOURCE_TABLES = inputFile.getConstant('SOURCE_TABLES')
+	TARGET_TABLES = inputFile.getConstant('TARGET_TABLES')
+	LESS_THAN = inputFile.getConstant('LESS_THAN')
+	GREATER_THAN = inputFile.getConstant('GREATER_THAN')
+	EQUALS = inputFile.getConstant('EQUALS')
+	NOT_EQUALS = inputFile.getConstant('NOT_EQUALS')
+	MAX_ERROR_COUNT = inputFile.getConstant('MAX_ERROR_COUNT')
+	REPORT_EMAIL = inputFile.getConstant('REPORT_EMAIL')
+	ERROR_EMAIL = inputFile.getConstant('ERROR_EMAIL')
+
+	errors = []
+
+	# required parameters in either SINGLE or DUAL mode
+	targetParameters = [ 'TARGET_TYPE', 'TARGET_SERVER', 'TARGET_NAME',
+		'TARGET_USER', 'TARGET_PASSWORD' ]
+
+	for parm in targetParameters:
+		if not inputFile.getConstant(parm):
+			errors.append ('Constant %s is missing' % parm) 
+
+	anyDual = False
+
+	for (key, rcd) in inputFile.items():
+
+		# MODE is required and must be either SINGLE or DUAL
+
+		if not rcd['MODE']:
+			errors.append ('Missing MODE for ID "%s"' % key)
+		elif rcd['MODE'] == DUAL:
+			anyDual = True
+		elif rcd['MODE'] != SINGLE:
+			errors.append ('Invalid MODE (%s) for ID "%s"' % (rcd['MODE'], key) )
+
+		# TARGET_SQL is required
+
+		if not rcd['TARGET_SQL']:
+			errors.append ('Missing TARGET_SQL for ID "%s"' % key)
+
+		# if in SINGLE MODE then VALUE and COMPARISON are required
+		#   1. VALUE must be an integer, and
+		#   2. COMPARISON must be one of our comparison constants
+
+		if rcd['MODE'] == SINGLE:
+			if not rcd['COMPARISON']:
+				errors.append (
+					'Missing COMPARISON for ID "%s"' \
+						% key)
+			elif rcd['COMPARISON'] not in [ GREATER_THAN, EQUALS,
+				LESS_THAN, NOT_EQUALS ]:
+				errors.append (
+					'Invalid COMPARISON for ID "%s"' \
+						% key)
+
+			if not rcd['VALUE']:
+				errors.append ('Missing VALUE for ID "%s"' \
+					% key)
+			else:
+				try:
+				    i = int(rcd['VALUE'])
+				except:
+				    errors.append (
+				      'VALUE for ID "%s" is not an integer' \
+					% key)
+
+		# if we include TABLE_SET then its value must be either
+		# TARGET_TABLES or SOURCE_TABLES.  If we are in SINGLE MODE
+		# then it must be TARGET_TABLES.
+
+		if rcd['TABLE_SET']:
+			if rcd['TABLE_SET'] not in [ TARGET_TABLES,
+			    SOURCE_TABLES ]:
+				errors.append (
+					'Invalid TABLE_SET for ID "%s"' % key)
+
+			if (rcd['MODE'] == SINGLE) and \
+			    (rcd['TABLE_SET'] == SOURCE_TABLES):
+				errors.append ('For SINGLE MODE you ' + \
+					'cannot use a SOURCE_TABLES ' + \
+					'TABLE_SET (ID "%s")' % key)
+
+
+	# if any of our tests required two databases, then we also need a set
+	# of database access parameters for the source database
+
+	if anyDual:
+		# required parameters if we are in DUAL mode (two databases)
+		sourceParameters = [ 'SOURCE_TYPE', 'SOURCE_SERVER',
+			'SOURCE_NAME', 'SOURCE_USER', 'SOURCE_PASSWORD' ]
+
+		for parm in sourceParameters:
+			if not inputFile.getConstant(parm):
+			    errors.append ('Constant %s is missing' % parm) 
+
+	# fill in the source and target database access information as needed
+
+	if anyDual:
+		SOURCE_DB = [ inputFile.getConstant('SOURCE_TYPE'),
+			inputFile.getConstant('SOURCE_SERVER'),
+			inputFile.getConstant('SOURCE_NAME'),
+			inputFile.getConstant('SOURCE_USER'),
+			inputFile.getConstant('SOURCE_PASSWORD') ]
+
+		if SOURCE_DB[0] and \
+		    (SOURCE_DB[0] not in [ MYSQL, POSTGRES, SYBASE ]):
+			errors.append ('Invalid SOURCE_TYPE: %s' % \
+				SOURCE_DB[0])
+
+	TARGET_DB = [ inputFile.getConstant('TARGET_TYPE'),
+			inputFile.getConstant('TARGET_SERVER'),
+			inputFile.getConstant('TARGET_NAME'),
+			inputFile.getConstant('TARGET_USER'),
+			inputFile.getConstant('TARGET_PASSWORD') ]
+
+	if TARGET_DB[0] and (TARGET_DB[0] not in [ MYSQL, POSTGRES, SYBASE ]):
+		errors.append ('Invalid TARGET_TYPE: %s' % TARGET_DB[0])
+
+	if errors:
+		sys.stderr.write ('The following errors were detected ' + \
+			'in your Rcd file:\n')
+		for error in errors:
+			sys.stderr.write ('    %s\n' % error)
+		bailout ('Please fix the above %d error(s)' % (len(errors),
+			False) )
+	debug ('Read input Rcd file')
+	return
+
+def executeStandard (conn, sqlCmd):
+	cursor = conn.cursor()
+	cursor.execute (sqlCmd)
+
+	columns = cursor.description[:]
+	rows = cursor.fetchall()
+
+	result = (columns, rows)
+	cursor.close()
+
+	return result
+
+def querySybase (dbInfo, sqlCmd):
+	[dbType, server, name, user, password] = dbInfo
+
+	if LOADED_SYBASE:
+		db.set_sqlCommand (user, password, server, name)
+		results = db.sql (sqlCmd, 'auto')
+
+		# convert results to standard format
+		if results:
+			cols = results[0].keys()
+			rows = []
+
+			for row in results:
+				r = []
+				for col in cols:
+					r.append(row[col])
+				rows.append(r)
+		else:
+			cols = []
+			rows = []
+
+		result = (cols, rows)
+
+	elif LOADED_FREETDS:
+		conn = Sybase.connect (server, user, password, name,
+			auto_commit = 1)
+		result = executeStandard (conn, sqlCmd)
+		conn.close()
+		conn = None
+	else:
+		bailout ('Cannot find either db or Sybase modules')
+
+	return result
+
+def queryMySQL (dbInfo, sqlCmd):
+	[dbType, server, name, user, password] = dbInfo
+
+	if not LOADED_MYSQL:
+		bailout ('Cannot load MySQLdb module')
+
+	conn = MySQLdb.connect (host=server, user=user, passwd=password,
+		db=name, local_infile=1)
+	result = executeStandard (conn, sqlCmd)
+	conn.close()
+	conn = None
+	return result
+
+def queryPostgres (dbInfo, sqlCmd):
+	[dbType, server, name, user, password] = dbInfo
+
+	if not LOADED_POSTGRES:
+		bailout ('Cannot load psycopg2 Postgres module')
+
+	conn = psycopg2.connect (host=server, user=user, password=password,
+		database=name)
+	result = executeStandard (conn, sqlCmd)
+	conn.close()
+	conn = None
+	return result
+
+def executeQuery (database, sqlCmd):
+	if database == SOURCE:
+		dbInfo = SOURCE_DB
+	elif database == TARGET:
+		dbInfo = TARGET_DB
+
+	dbType = dbInfo[0]
+
+	if dbType == SYBASE:
+		result = querySybase (dbInfo, sqlCmd)
+	elif dbType == MYSQL:
+		result = queryMySQL (dbInfo, sqlCmd)
+	elif dbType == POSTGRES:
+		result = queryPostgres (dbInfo, sqlCmd)
+
+	return result
+
+def getTableListSQL (database):
+	if database == SOURCE:
+		dbType = SOURCE_DB[0]
+	else:
+		dbType = TARGET_DB[0]
+
+	if dbType == 'sybase':
+		cmd = '''select o.name as tableName
+			from sysobjects o
+			where o.type = "U"
+			order by o.name'''
+
+	elif dbType == 'mysql':
+		cmd = 'show tables'
+	else:
+		cmd = "select TABLE_NAME from information_schema.tables where table_type='BASE TABLE' and table_schema='public'"
+
+	return cmd
+
+def getTableList (database):
+	global SOURCE_TABLE_LIST, TARGET_TABLE_LIST
+
+	if database == SOURCE:
+		if not SOURCE_TABLE_LIST:
+			cmd = getTableListSQL (database)
+			(cols, rows) = executeQuery (database, cmd)
+			for row in rows:
+				SOURCE_TABLE_LIST.append (row[0])
+			debug ('Retrieved source table list (%d tables)' \
+				% len(SOURCE_TABLE_LIST))
+			SOURCE_TABLE_LIST.sort()
+
+		return SOURCE_TABLE_LIST
+
+	if not TARGET_TABLE_LIST:
+		cmd = getTableListSQL (database)
+		(cols, rows) = executeQuery (database, cmd)
+		for row in rows:
+			TARGET_TABLE_LIST.append (row[0])
+		debug ('Retrieved target table list (%d tables)' % \
+			len(TARGET_TABLE_LIST))
+		TARGET_TABLE_LIST.sort()
+
+	return TARGET_TABLE_LIST
+
+def logError (e):
+	global ERRORS
+	ERRORS.append ( (time.time() - START_TIME, e) )
+	return
+
+def processSingleTest (rcd, table = None):
+	id = rcd['ID']
+	if table:
+		id = '%s (table %s)' % (id, table)
+
+	cmd = rcd['TARGET_SQL']
+	if table:
+		cmd = cmd % table
+
+	try:
+		(cols, rows) = executeQuery (TARGET, cmd)
+	except:
+		logError ('Failed to execute SQL for ID "%s" : %s' % (id,cmd))
+		return False
+
+	if len(rows) != 1:
+		logError ('Too many rows from SQL for ID "%s"' % id)
+		return False
+
+	if len(cols) != 1:
+		logError ('Too many columns from SQL for ID "%s"' % id)
+		return False
+
+	i = rows[0][0] 			# get the single value returned
+	value = int(rcd['VALUE'])	# get the desired value from rcd
+	msg = None			# describes the failed test
+
+	if rcd['COMPARISON'] == GREATER_THAN:
+		if i <= value:
+			msg = '%d > %d' % (i, value)
+	elif rcd['COMPARISON'] == LESS_THAN:
+		if i >= value:
+			msg = '%d < %d' % (i, value)
+	elif rcd['COMPARISON'] == EQUALS:
+		if i != value:
+			msg = '%d = %d' % (i, value)
+	elif rcd['COMPARISON'] == NOT_EQUALS:
+		if i == value:
+			msg = '%d != %d' % (i, value)
+
+	# if we had an error condition, log it
+
+	if msg:
+		if not rcd['MESSAGE']:
+			msg = 'ID "%s": failed %s' % (id, msg)
+		elif ('%s' in rcd['MESSAGE']) and table:
+			msg = rcd['MESSAGE'] % table
+		else:
+			msg = rcd['MESSAGE']
+
+		logError (msg)
+		return False
+	return True
+
+def processDualTest (rcd, table = None):
+	id = rcd['ID']
+	if table:
+		id = '%s (table %s)' % (id, table)
+
+	tCmd = rcd['TARGET_SQL']
+	if table:
+		tCmd = tCmd % table
+
+	sCmd = rcd['SOURCE_SQL']
+	if not sCmd:
+		sCmd = tCmd
+	elif table:
+		sCmd = sCmd % table
+
+	try:
+		(tCols, tRows) = executeQuery (TARGET, tCmd)
+	except:
+		logError ('Failed to execute target SQL for ID "%s"' % id)
+		return False
+
+	if len(tRows) != 1:
+		logError ('Too many rows from target SQL for ID "%s"' % id)
+		return False
+
+	if len(tCols) != 1:
+		logError ('Too many columns from target SQL for ID "%s"' % id)
+		return False
+
+	targetResult = tRows[0][0]
+
+	try:
+		(sCols, sRows) = executeQuery (SOURCE, sCmd)
+	except:
+		logError ('Failed to execute source SQL for ID "%s"' % id)
+		return False
+
+	if len(sRows) != 1:
+		logError ('Too many rows from source SQL for ID "%s"' % id)
+		return False
+
+	if len(sCols) != 1:
+		logError ('Too many columns from source SQL for ID "%s"' % id)
+		return False
+
+	sourceResult = sRows[0][0]
+
+	if targetResult != sourceResult:
+		if not rcd['MESSAGE']:
+			msg = 'ID "%s": failed %d (source) == %d (target)' % \
+				(id, sourceResult, targetResult)
+		elif ('%s' in rcd['MESSAGE']) and table:
+			msg = rcd['MESSAGE'] % table
+		else:
+			msg = rcd['MESSAGE']
+
+		logError (msg)
+		return False
+	return True
+
+def processTest (rcd):
+	if rcd['MODE'] == SINGLE:
+		f = processSingleTest
+	else:
+		f = processDualTest
+
+	results = []
+
+	if not rcd['TABLE_SET']:
+		results.append (f(rcd))
+		debug ('Finished test with ID "%s"' % rcd['ID'])
+	else:
+		if rcd['TABLE_SET'] == SOURCE_TABLES:
+			tableList = getTableList (SOURCE)
+		else:
+			tableList = getTableList (TARGET)
+
+		for table in tableList:
+			results.append (f(rcd, table))
+			debug ('Finished test with ID "%s" for table "%s"' \
+				% (rcd['ID'], table))
+
+	return results
+
+def sendReport (inputFile, successful, failed, message):
+	body = [ 'Status: %s' % message,
+		'Elapsed time: %10.3f sec' % (time.time() - START_TIME),
+		'Successful tests: %d' % successful,
+		'Failed tests: %d' % failed,
+		]
+
+	if ERRORS:
+		body.append ('Error messages:')
+		for (elapsed, error) in ERRORS:
+			body.append ('   %10.3f : %s' % (elapsed, error))
+
+	errorEmail = inputFile.getConstant('ERROR_EMAIL')
+	reportEmail = inputFile.getConstant('REPORT_EMAIL')
+
+	bodyText = '\n'.join (body)
+
+	if failed:
+		subject = 'dbcheck ERROR report'
+	else:
+		subject = 'dbcheck report'
+
+	if reportEmail:
+		mgi_utils.send_Mail('dbcheck', reportEmail, subject, bodyText)
+		debug ('Sent reporting email to %s' % reportEmail)
+
+	elif failed and errorEmail and (errorEmail != reportEmail):
+		mgi_utils.send_Mail('dbcheck', errorEmail, subject, bodyText)
+		debug ('Sent error email to %s' % errorEmail)
+
+	if not (reportEmail or errorEmail):
+		print bodyText
+	return
+
+def main():
+	# contains the main logic for the program
+
+	inputFile = processCommandLine()
+	processInputFile (inputFile)
+
+	successful = 0
+	failed = 0
+
+	maxErrors = inputFile.getConstant('MAX_ERROR_COUNT')
+
+	for (id, rcd) in inputFile.items():
+		results = processTest(rcd)
+		for result in results:
+			if result:
+				successful = successful + 1
+			else:
+				failed = failed + 1
+				if maxErrors and (failed >= maxErrors):
+				    sendReport (inputFile, successful, failed,
+					'Halted -- Reached MAX_ERROR_COUNT')
+				    sys.exit(1)
+
+	sendReport (inputFile, successful, failed, 'Completed Normally')
+	if failed:
+		sys.exit(1)
+	return
+
+###--- Main Program ---###
+
+if __name__ == '__main__':
+	main()
+
