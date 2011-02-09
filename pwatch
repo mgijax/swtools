@@ -51,17 +51,18 @@ MSG=
 COUNT=0
 SLEEPTIME=30
 MAXWAITS=960
+BOX=`hostname`
 
 while [ -z "$MSG" ]
 do
 	if notThere $PID
 	then
-		MSG="$0 reports success.  Process \"$1\" has completed."
+		MSG="$0 reports success.  Process \"$1\" has completed on ${BOX}."
 	else
 		COUNT=`expr $COUNT + 1`
 		if [ $COUNT -gt $MAXWAITS ]
 		then
-			MSG="$0 reports failure.  Process \"$1\" is still running."
+			MSG="$0 reports failure.  Process \"$1\" is still running on ${BOX}."
 		else
 			sleep $SLEEPTIME
 		fi
