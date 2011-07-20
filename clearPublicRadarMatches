@@ -1,0 +1,98 @@
+#!/usr/local/bin/python
+
+# Name: clearPublicRadarMatches
+# Purpose: to clear out a bunch of old results from TXT_Searches and
+#	TXT_Matches in the PUB_MGI..radar database.  (Doing all at once would
+#	be unwieldy at times, so this script does smaller numbers of them at
+#	a time)
+# Notes: must be run as user mgiadmin
+
+import os
+import sys
+sys.path.insert (0, '/usr/local/mgi/live/lib/python')
+if os.environ.has_key('MGICONFIG'):
+	sys.path.insert (0, os.environ['MGICONFIG'])
+
+import time
+import db
+import runCommand
+
+###--- Globals ---###
+
+USAGE = '''Usage: %s
+	Clears out old records from TXT_Searches and TXT_Matches in the
+	PUB_MGI..radar database.  Must be run as user mgiadmin.
+''' % sys.argv[0]
+
+START_TIME = time.time()
+
+###--- Functions ---###
+
+def report (message):
+	sys.stderr.write('%8.3f : %s\n' % (time.time() - START_TIME, message))
+	return
+
+def bailout (message, showUsage = False):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % message)
+	sys.exit(1)
+
+def checkUser():
+	(stdout, stderr, exitCode) = runCommand.runCommand ('whoami')
+
+	if not stdout.strip().startswith('mgiadmin'):
+		bailout ('%s must be run as mgiadmin' % sys.argv[0])
+	return
+
+def dbLogin():
+	try:
+		import masterConfig
+		mgiDbUtils = masterConfig.MGI_DBUTILS
+	except:
+		mgiDbUtils = '/usr/local/mgi/live/dbutils/mgidbutilities/'
+
+	try:
+		fp = open (os.path.join (mgiDbUtils,
+			'.mgd_dbo_public_password'),
+			'r')
+		lines = fp.readlines()
+		fp.close()
+	except:
+		bailout ('Cannot read .mgd_dbo_public_password file')
+
+	password = lines[0].strip()
+
+	db.set_sqlLogin ('mgd_dbo', password, 'PUB_MGI', 'radar')
+	report ('Logged into PUB_MGI..radar as mgd_dbo')
+	return
+
+def getOldSearchKeys():
+	searchKeys = []
+	results = db.sql (time.strftime('select _Search_key from TXT_Searches where searchTime < "%m/%d/%Y"', time.localtime(time.time())), 'auto')
+
+	for row in results:
+		searchKeys.append (row['_Search_key'])
+	return searchKeys
+
+def deleteSearchKeys (keys):
+	for key in keys:
+		db.sql ('delete from txt_matches where _Search_key = %s' % \
+			key, 'auto')
+		db.sql ('delete from txt_searches where _Search_key = %s' % \
+			key, 'auto')
+		report ('removed _Search_key %d' % key)
+	return
+
+def main():
+	checkUser()
+	dbLogin()
+	deleteSearchKeys(getOldSearchKeys())
+	report ('Done')
+	return
+
+###--- Main ---###
+
+if __name__ == '__main__':
+	main()
+
