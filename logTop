@@ -147,6 +147,8 @@ class Test:
 		self.topCommand = 'top'
 		self.topArguments = []
 		self.headings = []
+		self.extraCommand = None
+		self.extraArguments = []
 		return
 
 	def getHeadings (self):
@@ -158,15 +160,21 @@ class Test:
 	def getArgs (self):
 		return self.topArguments
 
-	def parseResults (self, lines):
+	def getExtraCommand (self):
+		return self.extraCommand
+
+	def getExtraArgs (self):
+		return self.extraArguments
+
+	def parseResults (self, lines, extraLines = None):
 		return 
 
 	def printHeadings (self):
 		print '\t'.join (['start time'] + self.headings)
 		return
 
-	def printResults (self, startTime, lines):
-		columns = self.parseResults(lines)
+	def printResults (self, startTime, lines, extraLines = None):
+		columns = self.parseResults(lines, extraLines)
 		columns.insert (0,
 			time.strftime('%Y-%m-%d %H:%M:%S',
 				time.localtime(startTime)))
@@ -182,27 +190,37 @@ class LinuxTest (Test):
 			'cpu idle %', 'cpu user %',
 			'cpu system %', 'cpu io wait %',
 			'RAM total (Mb)', 'RAM used (Mb)', 'RAM free (Mb)',
-			'RAM buffers (Mb)',
 			'swap total (Mb)', 'swap used (Mb)', 'swap free (Mb)',
 			'1-min load avg', '5-min load avg', '15-min load avg',
 			'running tasks', 'sleeping tasks',
 			]
+		self.extraCommand = 'free'
+		self.extraArguments = [ '-m' ]
 		return
 
-	def parseResults (self, lines):
-		cpu = None
-		mem = None
+	def parseResults (self, lines, extraLines = None):
+
+		cpu = None		# pulled from 'top'
 		swap = None
 		load = None
 		tasks = None
 
+		mem = None		# pulled from 'free -m'
+		cache = None
+		swap = None
+
+		if extraLines:
+			for line in extraLines:
+				if line.startswith('Mem:'):
+					mem = line.split()
+				elif line.startswith('-/+'):
+					cache = line.split()
+				elif line.startswith('Swap:'):
+					swap = line.split()
+
 		for line in lines:
 			if line.startswith('Cpu(s):'):
 				cpu = line.split()
-			elif line.startswith('Mem:'):
-				mem = line.split()
-			elif line.startswith('Swap:'):
-				swap = line.split()
 			elif line.startswith('Tasks:'):
 				tasks = line.split()
 			elif line.startswith('top - '):
@@ -219,17 +237,20 @@ class LinuxTest (Test):
 			columns = columns + [''] * 4
 
 		if mem:
-			columns.append (asMb (mem[1]))
-			columns.append (asMb (mem[3]))
-			columns.append (asMb (mem[5]))
-			columns.append (asMb (mem[7]))
+			columns.append (mem[1])
 		else:
-			columns = columns + [''] * 3
+			columns = columns + [''] 
+
+		if cache:
+			columns.append (cache[2])
+			columns.append (cache[3])
+		else:
+			columns = columns + [''] * 2
 
 		if swap:
-			columns.append (asMb (swap[1]))
-			columns.append (asMb (swap[3]))
-			columns.append (asMb (swap[5]))
+			columns.append (swap[1])
+			columns.append (swap[2])
+			columns.append (swap[3])
 		else:
 			columns = columns + [''] * 3
 
@@ -265,7 +286,7 @@ class Solaris10Test (Test):
 			]
 		return
 
-	def parseResults (self, lines):
+	def parseResults (self, lines, extraLines = None):
 		cpu = None
 		mem = None
 		load = None
@@ -275,7 +296,7 @@ class Solaris10Test (Test):
 			if line.startswith('CPU states:'):
 				cpu = line.split()
 			elif line.startswith('Memory:'):
-				mem = line.split()
+				mem = line.replace('swap in use', 'swap-in-use').split()
 			elif line.find(' processes:') >= 0:
 				tasks = line.replace(':','').replace(',','').split()
 			elif line.startswith('load averages:'):
@@ -335,11 +356,27 @@ def handleFinishedProcesses (processes):
 
 	# work on the first process, then recurse for any others
 
-	(startTime, proc) = processes[0]
+	(startTime, proc, proc2) = processes[0]
 
-	# if poll() returns None, then the process isn't finished
-	if proc.poll() == None:
+	# if poll() returns None, then the process isn't finished.
+	# both proc and proc2 must have finished
+	if (proc.poll() == None):
 		return processes
+
+	if proc2 != None:
+		if proc2.poll() == None:
+			return processes
+
+		exitCode2 = proc2.returncode
+		stdout2 = proc2.stdout.readlines()
+		stderr2 = proc2.stderr.readlines()
+
+		proc2.wait()
+
+		if exitCode2:
+			bailout ('Subprocess failed: %s' % str(stderr))
+	else:
+		stdout2 = [] 
 
 	exitCode = proc.returncode
 	stdout = proc.stdout.readlines()
@@ -350,7 +387,7 @@ def handleFinishedProcesses (processes):
 	if exitCode:
 		bailout ('Subprocess failed: %s' % str(stderr))
 
-	TESTER.printResults (startTime, stdout)
+	TESTER.printResults (startTime, stdout, stdout2)
 
 	# recurse over any other processes
 	return handleFinishedProcesses (processes[1:])
@@ -368,7 +405,16 @@ def main():
 	nextTime = now + DELAY
 	endTime = now + DURATION * 60.0
 
-	processes = [ (now, invoke(top, args)) ]
+	extraCmd = TESTER.getExtraCommand()
+	extraArgs = TESTER.getExtraArgs()
+
+
+	if extraCmd:
+		proc2 = invoke(extraCmd, extraArgs)
+	else:
+		proc2 = None
+
+	processes = [ (now, invoke(top, args), proc2) ]
 
 	while (now < endTime) or (len(processes) > 0):
 		now = time.time()
@@ -393,7 +439,13 @@ def main():
 				if nextTime - now > 0.0:
 					time.sleep(nextTime - now)
 				proc = invoke (top, args)
-				processes.append ( (nextTime, proc) )
+
+				if extraCmd:
+					proc2 = invoke(extraCmd, extraArgs)
+				else:
+					proc2 = None
+
+				processes.append ( (nextTime, proc, proc2) )
 
 				nextTime = nextTime + DELAY
 			else:
