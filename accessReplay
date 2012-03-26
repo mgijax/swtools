@@ -249,7 +249,10 @@ def manageActiveProcesses (activeProcs, bailoutTime = None):
 		# if poll() returns non-None, then the process is finished
 		if process.poll() != None:
 			returnCode = process.returncode
+
 			stdout = process.stdout.readlines()
+			process.stdout.close()
+
 #			stderr = process.stderr.readlines()
 
 			# let the process itself die, then remove it from the
@@ -533,6 +536,13 @@ def parentProcessMain():
 				# in exactly the original time, but at least
 				# the script will keep going and will catch up
 				# later on.
+
+				time.sleep (0.2)
+				manageActiveProcesses (activeProcs, 0.2)
+
+			except ImportError:
+				# another error that crops up due to too few
+				# file handles
 
 				time.sleep (0.2)
 				manageActiveProcesses (activeProcs, 0.2)
