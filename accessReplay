@@ -1,0 +1,573 @@
+#!/usr/local/bin/python
+
+# Name: accessReplay
+# Purpose: to replay an Apache access log and report results
+
+import sys
+import time
+import getopt
+import os
+import subprocess
+import types
+import re
+import httpReader
+
+USAGE = '''Usage: %s [-x <url>] <log file>
+    Purpose: to replay an Apache access log and report results
+    Options:
+	-x : (internal use only) passes a URL to a subprocess
+    Notes:
+    1. While <log file> is required when invoking the script, it will not be
+	passed along to subprocesses.
+''' % sys.argv[0]
+
+###---------------###
+###--- globals ---###
+###---------------###
+
+IS_SUBPROCESS = False	# boolean; is this a subprocess?
+OUTPUT_FILE = None	# string; filename to which to write results
+OUTPUT_EMAIL = None	# string; email address to which to send results
+LOG_FILE = None		# string; filename for Apache access.log records
+LOG_FILE_FD = None	# file descriptor for LOG_FILE, opened for reading
+SUBPROCESS_URL = None	# string; URL to be loaded in this subprocess
+TIMEOUT = 60		# int; max seconds to allow for a successful page load
+BUFFER = []		# list of strings; input lines
+BUFFER_INDEX = 0	# int; index into BUFFER of next line to return
+BUFFER_SIZE = 1000	# int; number of access log lines to cache in memory
+DELAY = 0.1		# float; seconds of delay to allow as a buffer for
+			# ...housekeeping
+
+TIMES = {}		# maps url -> list of (line num, seconds to return)
+SIZES = {}		# maps url -> list of (line num, bytes returned)
+
+START_DATETIME = None	# datetime of first log entry processed
+STOP_DATETIME = None	# datetime of last log entry processed
+COUNT = 0		# number of log entries processed
+
+###-----------------###
+###--- functions ---###
+###-----------------###
+
+def bailout (message, showUsage = False):
+	if showUsage:
+		print USAGE
+	print 'Error: %s' % message
+	sys.exit(1)
+
+def processCommandLine():
+	global IS_SUBPROCESS, OUTPUT_FILE, OUTPUT_EMAIL, LOG_FILE
+	global SUBPROCESS_URL
+
+	try:
+		(options, args) = getopt.getopt (sys.argv[1:], 'x:')
+	except getopt.GetoptError:
+		bailout ('Improper command-line option(s)', True)
+
+	for (option, value) in options:
+		if option == '-x':
+			IS_SUBPROCESS = True
+			SUBPROCESS_URL = value
+		elif option == '-o':
+			OUTPUT_FILE = value
+		elif option == '-e':
+			OUTPUT_EMAIL = value
+		else:
+			bailout ('Unknown flag: %s' % option, True)
+
+	if not IS_SUBPROCESS:
+		if len(args) < 1:
+			bailout ('Missing <log file> parameter', True)
+		elif len(args) > 1:
+			bailout ('Too many parameters', True)
+
+		LOG_FILE = args[0]
+
+		if not os.path.exists(LOG_FILE):
+			bailout ('Unknown file: %s' % LOG_FILE, True)
+
+	elif len(args) > 0:
+		bailout ('Too many parameters to subprocess')
+	return
+
+def subprocessMain():
+	output = []
+	error = None
+	elapsed = 0.0
+
+	try:
+		startTime = time.time()
+		(output, error) = httpReader.getURL (SUBPROCESS_URL,
+			timeout = TIMEOUT)
+		elapsed = time.time() - startTime
+
+	except httpReader.error, excValue:
+		error = excValue
+
+	# subprocess will print 3 lines to stdout:
+	# 1. the URL it attempted to retrieve
+	# 2. number of seconds to between request and response
+	# 3. number of bytes received, or a 'Failed' message
+
+	print SUBPROCESS_URL
+	print '%0.3f sec' % elapsed
+
+	if error:
+		print 'Failed: %s' % error
+
+#		fp = open ('errors.txt', 'a')
+#		fp.write ('%s failed : %s\n' % (SUBPROCESS_URL, error))
+#		fp.close()
+
+		sys.exit(1)
+	else:
+		print '%d bytes' % len(''.join(output))
+	return
+
+def getLine():
+	global BUFFER, BUFFER_INDEX
+
+	if len(BUFFER) <= BUFFER_INDEX:
+
+		# reset the buffer
+		BUFFER = []
+		BUFFER_INDEX = 0
+
+		# bring a bunch of lines from the file into the buffer
+		i = 0
+
+		while i < BUFFER_SIZE:
+			line = LOG_FILE_FD.readline()
+
+			# when we hit EOF, exit the loop immediately
+			if line:
+				BUFFER.append (line)
+				i = i + 1
+			else:
+				i = BUFFER_SIZE
+
+	# if we have an empty buffer, we have no line to return
+	if len(BUFFER) == 0:
+		return None
+
+	# remember the next line to return, and advance the index for the next
+	# line to return
+	line = BUFFER[BUFFER_INDEX]
+	BUFFER_INDEX = BUFFER_INDEX + 1
+
+	return line
+
+# cache the last time returned by getTime()
+cachedTime = 0.0
+
+def getTime(line):
+	# returns float number of seconds since the epoch
+	global cachedTime
+
+	# if we cannot parse a time from 'line', then just return the last
+	# time we successfully found
+
+	bracketIndex = line.find('[')
+	if bracketIndex >= 0:
+		spaceIndex = line.find(' ', bracketIndex)
+		if spaceIndex >= 0:
+			dateTime = line[bracketIndex+1:spaceIndex]
+			cachedTime = time.mktime(time.strptime(dateTime,
+				'%d/%b/%Y:%H:%M:%S')) 
+	return cachedTime 
+
+# regular expression for pulling the URL out of an access.log line, used
+# by getUrlAndParameters()
+urlRE = re.compile ('"[^ ]+ ([^"]+) [^ "]+"')
+
+def getUrlAndParameters(line):
+	# returns a tuple (URL, parameter string) parsed from 'line'
+
+	global urlRE
+
+	url = ''
+	parms = ''
+
+	match = urlRE.search(line)
+	if match:
+		fullUrl = match.group(1)
+		markPos = fullUrl.find('?')
+		if markPos >= 0:
+			url = fullUrl[:markPos]
+			parms = fullUrl[markPos+1:]
+		else:
+			url = fullUrl 
+
+	return url, parms
+
+javawi2PageRE = re.compile ('(page=[^& "]+)')
+idRE = re.compile ('(^[A-Za-z0-9:_]+)$')
+
+def getPageIdentifier (url, parms):
+	# returns a page-type identifier based on 'url' and 'parms', taking
+	# into account URL differences among Python and Java WIs and the fewi
+
+	# javawi2 pages have an identifying 'page' parameter
+
+	if url.find('javawi2/servlet/WIFetch') >= 0:
+		match = javawi2PageRE.search(parms)
+		if match:
+			return url + '?' + match.group(1)
+		return url
+
+	# fewi pages often have a trailing ID after a slash
+
+	pieces = url.split('/')
+	match = idRE.match(pieces[-1])
+	if match and not parms:
+		return url.replace ('/' + match.group(1), '')
+
+	# just return the original URL as-is
+	return url 
+
+def manageActiveProcesses (activeProcs, bailoutTime = None):
+	# Look for finished processes, record any info about them, and close
+	# them out.  Only work until 'bailoutTime', however; quit early if we
+	# reach that time.
+
+	global TIMES, SIZES
+
+	i = len(activeProcs) - 1
+
+	if bailoutTime == None:
+		# stop this admin work within five seconds
+		bailoutTime = time.time() + 5.0
+
+	while i >= 0:
+		# if we hit our bailout time, then we've done all we have time
+		# for at the moment -- bail out now
+		if time.time() >= bailoutTime:
+			return
+
+		(lineNumber, url, parms, process) = activeProcs[i]
+
+		# if poll() returns non-None, then the process is finished
+		if process.poll() != None:
+			returnCode = process.returncode
+			stdout = process.stdout.readlines()
+#			stderr = process.stderr.readlines()
+
+			# let the process itself die, then remove it from the
+			# list of active processes
+
+			process.wait()
+			del activeProcs[i]
+
+			if len(stdout) >= 3:
+				#myUrl = stdout[0].strip()
+				myTime = float(stdout[1].split()[0])
+
+				if returnCode != 0:
+					size = None
+				else:
+					size = int(stdout[2].split()[0])
+			else:
+				myTime = None
+				size = None
+
+			page = getPageIdentifier (url, parms)
+
+			if TIMES.has_key(page):
+				TIMES[page].append ( (lineNumber, myTime) )
+			else:
+				TIMES[page] = [ (lineNumber, myTime) ]
+
+			if SIZES.has_key(page):
+				SIZES[page].append ( (lineNumber, size) )
+			else:
+				SIZES[page] = [ (lineNumber, size) ]
+		i = i - 1
+	return
+
+scriptStartTime = time.time()
+logStartTime = None
+
+def translateTime(logTime):
+	# convert the given time (in seconds) from the log into the
+	# corresponding time which has been offset from the start of this run
+
+	global logStartTime
+
+	if logStartTime == None:
+		logStartTime = logTime
+
+	return scriptStartTime + (logTime - logStartTime)
+
+def formatTime (seconds):
+	return time.strftime('%d/%b/%Y %H:%M:%S', time.localtime(seconds))
+
+def reportResults():
+	global SIZES, TIMES
+
+	urls = TIMES.keys()
+	urls.sort()
+
+	print 'Processed %d log entries from %s to %s' % (COUNT,
+		formatTime(START_DATETIME), formatTime(STOP_DATETIME))
+	print
+	print ''
+
+	# compute overall summary data
+
+	totalTime = 0
+	totalSize = 0
+	maxTime = 0.0
+	maxTimeLine = 0
+	minTime = 9999.0
+	minTimeLine = 0
+	maxSize = 0
+	maxSizeLine = 0
+	minSize = 9999999
+	minSizeLine = 0
+	failures = 0
+
+	perUrl = {}	# url -> (time, size, ...)
+
+	for url in urls:
+		urlTotalTime = 0
+		urlTotalSize = 0
+		urlMaxTime = 0.0
+		urlMaxTimeLine = 0
+		urlMinTime = 9999.0
+		urlMinTimeLine = 0
+		urlMaxSize = 0
+		urlMaxSizeLine = 0
+		urlMinSize = 9999999
+		urlMinSizeLine = 0
+		urlFailures = 0
+
+		times = TIMES[url]
+		sizes = SIZES[url]
+		count = len(times)
+
+		i = 0
+		while i < count:
+			myTimeLine, myTime = times[i]
+			mySizeLine, mySize = sizes[i]
+
+			i = i + 1
+
+			# if we had a failure, just count it but don't
+			# figure it in the averages
+
+			if mySize == None:
+				failures = failures + 1
+				urlFailures = urlFailures + 1
+				continue
+
+			# do overall summary computations
+
+			totalTime = totalTime + myTime
+			totalSize = totalSize + mySize
+			
+			if myTime > maxTime:
+				maxTime = myTime
+				maxTimeLine = myTimeLine
+			if myTime < minTime:
+				minTime = myTime
+				minTimeLine = myTimeLine
+			if mySize > maxSize:
+				maxSize = mySize
+				maxSizeLine = mySizeLine
+			if mySize < minSize:
+				minSize = mySize 
+				minSizeLine = mySizeLine
+
+			# do per-URL computations
+
+			urlTotalTime = urlTotalTime + myTime
+			urlTotalSize = urlTotalSize + mySize
+			
+			if myTime > urlMaxTime:
+				urlMaxTime = myTime
+				urlMaxTimeLine = myTimeLine
+			if myTime < urlMinTime:
+				urlMinTime = myTime
+				urlMinTimeLine = myTimeLine
+			if mySize > urlMaxSize:
+				urlMaxSize = mySize
+				urlMaxSizeLine = mySizeLine
+			if mySize < urlMinSize:
+				urlMinSize = mySize 
+				urlMinSizeLine = mySizeLine
+
+		# remember the per-URL results
+
+		perUrl[url] = (count, urlTotalTime, urlTotalSize, urlMaxTime,
+			urlMaxTimeLine, urlMinTime, urlMinTimeLine,
+			urlMaxSize, urlMaxSizeLine, urlMinSize,
+			urlMinSizeLine, urlFailures)
+
+	# report overall summary data
+
+	if COUNT > failures:
+		print 'Average Time:\t%8.3f' % (totalTime * 1.0 /
+			(COUNT - failures))
+		print 'Average Size:\t%8.0f' % (totalSize * 1.0 /
+			(COUNT - failures))
+	else:
+		print 'Average Time:\t%8.3f' % 0.0
+		print 'Average Size:\t%8.0f' % 0.0
+
+	print
+	print 'Minimum Time:\t%8.3f\ton line\t%d' % (minTime, minTimeLine)
+	print 'Maximum Time:\t%8.3f\ton line\t%d' % (maxTime, maxTimeLine)
+	print 'Minimum Size:\t%8.3f\ton line\t%d' % (minSize, minSizeLine)
+	print 'Maximum Size:\t%8.3f\ton line\t%d' % (maxSize, maxSizeLine)
+	print
+	print 'Failures:\t%8d of %8d' % (failures, COUNT)
+	print
+
+	# report per-URL summary data
+
+	for url in urls:
+		(count, urlTotalTime, urlTotalSize, urlMaxTime,
+			urlMaxTimeLine, urlMinTime, urlMinTimeLine,
+			urlMaxSize, urlMaxSizeLine, urlMinSize,
+			urlMinSizeLine, urlFailures) = perUrl[url]
+
+		print '-' * 40
+		print url
+		print
+
+		if count > urlFailures:
+			print 'Average Time:\t%8.3f' % (urlTotalTime * 1.0 
+				/ (count - urlFailures))
+			print 'Average Size:\t%8.0f' % (urlTotalSize * 1.0 /
+				(count - urlFailures))
+		else:
+			print 'Average Time:\t%8.3f' % 0.0
+			print 'Average Size:\t%8.0f' % 0.0
+
+		print
+		print 'Minimum Time:\t%8.3f\ton line\t%d' % (urlMinTime,
+			urlMinTimeLine)
+		print 'Maximum Time:\t%8.3f\ton line\t%d' % (urlMaxTime,
+			urlMaxTimeLine)
+		print 'Minimum Size:\t%8.3f\ton line\t%d' % (urlMinSize,
+			urlMinSizeLine)
+		print 'Maximum Size:\t%8.3f\ton line\t%d' % (urlMaxSize,
+			urlMaxSizeLine)
+		print
+		print 'Failures:\t%8d of %8d' % (urlFailures, count)
+		print
+	return
+
+def parentProcessMain():
+	global LOG_FILE_FD, COUNT, START_DATETIME, STOP_DATETIME
+
+	try:
+		LOG_FILE_FD = open (LOG_FILE, 'r')
+	except:
+		bailout ('Cannot open file: %s' % LOG_FILE, True)
+
+	# list of active subprocesses with accompanying data:
+	#	(line number, url, parameters, process object)
+	activeProcs = []
+
+	lastTime = None
+	line = getLine()
+	COUNT = 0
+	
+	# as long as we have more log entries in the access.log file...
+	while line != None:
+		COUNT = COUNT + 1
+
+		# pull out the time, URL, and parameters from the line
+		lineTime = getTime(line)
+		url, parms = getUrlAndParameters(line)
+
+		if parms:
+			fullUrl = '%s?%s' % (url, parms)
+		else:
+			fullUrl = url
+
+		if not START_DATETIME:
+			START_DATETIME = lineTime
+
+		STOP_DATETIME = lineTime
+
+		# get the time at which we need to invoke the URL
+		startTime = translateTime(lineTime)
+
+		# time by which we want administrative tasks to end, so we
+		# have plenty of time for the next URL to get invoked on
+		# schedule
+		stopTime = startTime - DELAY
+
+		# current time
+		now = time.time()
+
+		# if we have extra time, then use it to clean up after any
+		# finished processes
+		while now < stopTime:
+			manageActiveProcesses (activeProcs, stopTime)
+			now = time.time()
+
+			if stopTime - now > 0.0:
+				# take a break, if we have time
+				time.sleep (min (stopTime - now, DELAY))
+				now = time.time()
+
+		# wait out our built-in delay, then start a process to invoke
+		# the URL
+
+		if now < startTime:
+			time.sleep (startTime - now)
+
+		process = None
+		while not process:
+			try:
+				process = subprocess.Popen ( [ sys.argv[0],
+					'-x', fullUrl ],
+					stdout=subprocess.PIPE)
+			except OSError:
+				# we ran out of file handles in the OS, so
+				# wait a little and try again.  This means
+				# that we will not be replaying this section
+				# in exactly the original time, but at least
+				# the script will keep going and will catch up
+				# later on.
+
+				time.sleep (0.2)
+				manageActiveProcesses (activeProcs, 0.2)
+
+		# add the new process to the list of active processes, and get
+		# the new log file line
+
+		activeProcs.insert (0, (COUNT, url, parms, process) )
+		line = getLine()
+
+	LOG_FILE_FD.close()
+
+	# done with log entries, now we just need to wait for any subprocesses
+	# to finish
+
+	while activeProcs:
+		time.sleep (DELAY)
+		manageActiveProcesses (activeProcs)
+
+	# do final reporting
+	reportResults() 
+	return
+
+def main():
+	processCommandLine()
+
+	if IS_SUBPROCESS:
+		subprocessMain()
+	else:
+		parentProcessMain()
+	return
+
+###--------------------###
+###--- main program ---###
+###--------------------###
+
+if __name__ == '__main__':
+	main()
