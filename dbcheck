@@ -548,6 +548,7 @@ def getTableList (database):
 				% len(SOURCE_TABLE_LIST))
 			SOURCE_TABLE_LIST.sort()
 
+		SOURCE_TABLE_LIST = map (lambda x : x.lower(), SOURCE_TABLE_LIST)
 		return SOURCE_TABLE_LIST
 
 	if not TARGET_TABLE_LIST:
@@ -558,6 +559,8 @@ def getTableList (database):
 		debug ('Retrieved target table list (%d tables)' % \
 			len(TARGET_TABLE_LIST))
 		TARGET_TABLE_LIST.sort()
+
+		TARGET_TABLE_LIST = map (lambda x : x.lower(), TARGET_TABLE_LIST)
 
 	return TARGET_TABLE_LIST
 
