@@ -443,7 +443,7 @@ def querySybase (dbInfo, sqlCmd):
 	[dbType, server, name, user, password] = dbInfo
 
 	if LOADED_SYBASE:
-		db.set_sqlCommand (user, password, server, name)
+		db.set_sqlLogin (user, password, server, name)
 		results = db.sql (sqlCmd, 'auto')
 
 		# convert results to standard format
