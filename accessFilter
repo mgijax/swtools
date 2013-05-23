@@ -327,7 +327,7 @@ def includeDate (dateTime):
 GXD_TAGS = [ 'expression', 'gxdindex', 'estclone', 'anatdict', 'AMA', 'GEN',
 	'markerTissues', 'antibody', 'antigen', '/image.cgi', 'exptools',
 	'GXD', 'gxd_tissue_report', 'imageSummaryByMrk', 'ADRefiner',
-	'cDNAQF'
+	'cDNAQF', '/gxd'
 	]
 
 def isGxd (uri):
