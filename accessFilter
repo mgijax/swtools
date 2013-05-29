@@ -23,6 +23,7 @@ USAGE = '''Usage: %s [-r|-s|-i|-j|-C|-m|-g|-v|-b <date>|-a <date>] [-f <filename
 	-i : exclude requests for JPG or GIF images
 	-j : exclude requests for Javascript files
 	-C : exclude requests for CSS files
+	-t : exclude requests for counts (totalCount / gxdLitCount)
 	-m : exclude hits from MGI machines
 	-g : exclude hits for GXD pages (often would use this with -v)
 	-v : reverse processing (include only those specified, not exclude)
@@ -70,6 +71,7 @@ JAVASCRIPT = False
 CSS = False
 MGI = False
 GXD = False
+COUNTS = False
 
 NO_CACHE = False
 AFTER_DATE = None
@@ -152,12 +154,12 @@ def userDate (s):
 def processCommandLine():
 	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
 	global AFTER_DATE, BEFORE_DATE, THREAD_COUNT, DEBUG, NO_CACHE
-	global JAVASCRIPT, CSS, SUBPROCESS
+	global JAVASCRIPT, CSS, SUBPROCESS, COUNTS
 	global REFER_STR, URL_STR
 
 	try:
 		options, args = getopt.getopt (sys.argv[1:],
-			'rsimgvxf:o:a:b:w:dcjCF:R:')
+			'rsimgtvxf:o:a:b:w:dcjCF:R:')
 	except getopt.GetoptError:
 		bailout ('Invalid command-line flag(s)')
 
@@ -175,6 +177,8 @@ def processCommandLine():
 			IMAGES = True
 		elif option == '-m':
 			MGI = True
+		elif option == '-t':
+			COUNTS = True
 		elif option == '-v':
 			REVERSE = True
 		elif option == '-f':
@@ -213,9 +217,9 @@ def processCommandLine():
 
 	if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
 			BEFORE_DATE or AFTER_DATE or JAVASCRIPT or CSS or \
-			REFER_STR or URL_STR):
+			REFER_STR or URL_STR or COUNTS):
 		bailout ('Must use at least one of -r, -s, -i, -j, ' + \
-			'-C, -m, -g, -a, -b, -R, or -F')
+			'-C, -t, -m, -g, -a, -b, -R, or -F')
 	return
 
 def closeFiles():
@@ -391,6 +395,12 @@ def keepLine (line):
 		if numFields >= 7:
 			if isGxd(fields[6]):
 				output = False
+
+	if output and COUNTS:
+		if numFields >= 7:
+			if (fields[6].find('/totalCount') >= 0) or \
+				(fields[6].find('/gxdLitCount') >= 0):
+					output = False
 
 	if output and (BEFORE_DATE or AFTER_DATE):
 		if numFields >= 4:
