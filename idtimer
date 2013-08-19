@@ -1,0 +1,57 @@
+#!/usr/local/bin/python
+
+# Usage: idtimer <file containing IDs> <URL to which to append each ID>
+# Purpose: retrieves page at given URL + each ID, recording timing and
+#	doing simple reporting
+
+import sys
+if '/usr/local/mgi/lib/python' not in sys.path:
+	sys.path.insert (0, '/usr/local/mgi/lib/python')
+
+import time
+import httpReader
+import string
+
+def getPage (url, timeout = 60 * 8):
+	lines, errors = httpReader.getURL (url, timeout = timeout)
+	return lines, errors
+
+def average (list):
+	sum = 0
+	for item in list:
+		sum = sum + item
+	return sum / len(list)
+
+def main (count = 10):
+	inputFile = sys.argv[1]
+
+	fp = open(inputFile, 'r')
+	inputLines = map(string.strip, fp.readlines())
+	fp.close()
+
+	url = sys.argv[2]
+
+	times = []
+	failures = 0
+
+	for s in inputLines:
+		start = time.time()
+		lines, errors = getPage (url + s)
+		stop = time.time()
+
+		if errors:
+			failures = failures + 1
+		else:
+			times.append (stop - start)
+
+	times.sort()
+	print 'URL: %s' % url
+	print 'Failure Count: %3d' % failures
+	print 'Average Time:  %7.3f' % average(times)
+	print 'Minimum Time:  %7.3f' % times[0]
+	print 'Maximum Time:  %7.3f' % times[-1]
+	print
+	return
+
+if __name__ == '__main__':
+	main()
