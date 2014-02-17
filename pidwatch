@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# monitor memory usage and CPU for a single process, specified by PID
+
+USAGE="Usage: $0 <pid>\n
+    Watch the memory and CPU usage (using prstat) for the given process,\n
+    re-sampling every five seconds and showing the history over time.\n
+    (useful for watching the memory footprint of a given script)\n
+"
+
+if [ "$1" -eq "" ]; then
+echo $USAGE
+exit 1
+fi
+
+PID=$1
+PROCCOUNT=`prstat -p ${PID} 1 1 | grep "${PID}" | wc -l`
+
+while [ "${PROCCOUNT}" -eq "1" ]; do
+prstat -p ${PID} 1 1 | grep "${PID}"
+sleep 5
+PROCCOUNT=`prstat -p ${PID} 1 1 | grep "${PID}" | wc -l`
+done
+ENDTIME=`uptime | awk "{print $1}"`
+echo "Process ${PID} finished at ${ENDTIME}"
