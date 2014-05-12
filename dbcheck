@@ -531,7 +531,7 @@ def getTableListSQL (database):
 	elif dbType == 'mysql':
 		cmd = 'show tables'
 	else:
-		cmd = "select TABLE_NAME from information_schema.tables where table_type='BASE TABLE' and table_schema='public'"
+		cmd = "select TABLE_NAME from information_schema.tables where table_type='BASE TABLE' and table_schema='mgd'"
 
 	return cmd
 
@@ -641,6 +641,9 @@ def processDualTest (rcd, table = None):
 	try:
 		(tCols, tRows) = executeQuery (TARGET, tCmd)
 	except:
+		import traceback
+		traceback.print_exc()
+		sys.exit(1)
 		logError ('Failed to execute target SQL for ID "%s"' % id)
 		return False
 
