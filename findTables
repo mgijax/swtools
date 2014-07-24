@@ -113,12 +113,17 @@ def joinLines(data):
 
 	joined = re.sub(' [a-zA-Z0-9]+, *', '!!!', joined)
 
-	# remove Java comments
+	# remove Java comments (does not handle nested comments)
 
-	newJoined = re.sub('/\*[^*]*\*/', '', joined)
-	while (newJoined != joined):
-		joined = newJoined
-		newJoined = re.sub('/\*[^*]*\*/', '', joined)
+	startComment = joined.find('/*')
+	while (startComment >= 0):
+		endComment = joined.find('*/', startComment + 2)
+
+		if endComment >= 0:
+			joined = joined[:startComment] + joined[endComment+2:]
+			startComment = joined.find('/*')
+		else:
+			startComment = -1
 
 	return joined 
 
@@ -158,6 +163,40 @@ def process(onOneLine):
 				tables[tbl] = 1 
 
 		pos = findElement(src, 'from', pos + 1)
+
+	# need to look for tables in an UPDATE statement
+
+	pos = findElement(src, 'update')
+
+	while pos != None:
+		if (pos + 1) < itemCount:
+			tables[src[pos + 1]] = 1
+
+		pos = findElement(src, 'update', pos + 1)
+
+	# need to look for tables in a DELETE statement
+
+	pos = findElement(src, 'delete')
+
+	while pos != None:
+		if (pos + 1) < itemCount:
+			t = src[pos + 1]
+			if t != 'from':
+				tables[t] = 1
+
+		pos = findElement(src, 'delete', pos + 1)
+
+	# need to look for tables in Hibernate @...Table annotations
+
+	tableName = re.compile ('''@[A-Za-z.]*Table *\( *name=["']([^'"]+)''')
+	tableAppliesTo = re.compile ('''@[A-Za-z.]*Table *\( *appliesTo=["']([^'"]+)''')
+	srcStr = ' '.join(src)
+
+	for regex in [ tableName, tableAppliesTo ]:
+		match = regex.search(srcStr)
+		while match:
+			tables[match.group(1)] = 1
+			match = regex.search(srcStr, match.regs[0][1])
 
 	return tables
 
