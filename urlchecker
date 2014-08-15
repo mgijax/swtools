@@ -1,8 +1,8 @@
 #!/usr/local/bin/python
 
 # does simple validation for pages specified in an Rcd-formatted
-# verifies that pages come back with 200, and not 404 or 500
 # configuration file.
+# verifies that pages come back with 200, and not 404 or 500
 
 import sys
 import time
