@@ -1,0 +1,378 @@
+#!/usr/local/bin/python
+
+# does simple validation for pages specified in an Rcd-formatted
+# verifies that pages come back with 200, and not 404 or 500
+# configuration file.
+
+import sys
+import time
+import getopt
+import os
+import rcdlib
+import httpReader
+
+USAGE = '''Usage: %s [-r] <input file>
+    Options:
+	-r : write to stdout a sample Rcd-formatted file
+    Notes:
+	1. The <input file> is an Rcd-formatted file of definitions for the
+	pages to request, the timeout values allowed, the messages to report,
+	etc.  To get a sample file, use the -r option to write one to stdout.
+	2. If you use the -r option for a sample Rcd file, all other options
+	are ignored.
+''' % sys.argv[0]
+
+DIVIDER = '###%s###\n' % ('-' * 64)
+
+###---------------###
+###--- classes ---###
+###---------------###
+
+class Page:
+	def __init__ (self, name, url, allowed, maxtime, timeoutMsg,
+			failureMsg) :
+		self.name = name
+		self.url = url
+		self.allowed = int(allowed)
+		self.maxtime = int(maxtime)
+		self.timeoutMsg = timeoutMsg
+		self.failureMsg = failureMsg
+
+	def getUrl (self):
+		return self.url
+
+	def buildErrorMessage(self, message, elapsed):
+		message = "<NL><NAME><NL>Url: <URL><NL>" + message
+		return self.buildMessage(message, elapsed)
+
+	def buildMessage (self, message, elapsed):
+		# process special tags in message
+
+		if message.find('<NL>') >= 0:
+			message = message.replace ('<NL>', '\n\t')
+		if message.find('<NAME>') >= 0:
+			message = message.replace ('<NAME>', self.name)
+		if message.find('<URL>') >= 0:
+			message = message.replace ('<URL>', self.url)
+		if message.find('<ALLOWED>') >= 0:
+			message = message.replace ('<ALLOWED>',
+				str(self.allowed))
+		if message.find('<MAXTIME>') >= 0:
+			message = message.replace ('<MAXTIME>',
+				str(self.maxtime))
+		if message.find('<DATE>') >= 0:
+			message = message.replace ('<DATE>', time.strftime (
+				"%m/%d/%Y", time.localtime (time.time()) ))
+		if message.find('<TIME>') >= 0:
+			message = message.replace ('<TIME>', time.strftime (
+				"%H:%M:%S", time.localtime (time.time()) ))
+		if message.find('<ELAPSED>') >= 0:
+			message = message.replace ('<ELAPSED>', 
+				'%0.1f' % elapsed)
+		return message
+
+	def measure (self):
+		# returns (elapsed time, timeout msg, error msg)
+
+		startTime = time.time()
+		logMessage("checking url=%s"%self.url)
+
+		reader = httpReader.httpReader(self.url, {}, self.maxtime)
+		(contents, error) = reader.getPage();
+		statusCode = reader.code
+		if statusCode != 200:
+			error = "ERROR: status code = %d"%statusCode
+
+		stopTime = time.time()
+		elapsed = stopTime - startTime
+
+		failMsg = None
+		timeMsg = None
+		errMsg = None
+
+		if error:
+			if error.find ('timed out') >= 0:
+				failMsg = self.buildErrorMessage(self.failureMsg, elapsed)
+			else:
+				errMsg = self.buildErrorMessage(error, elapsed)
+
+		if contents:
+			page = '\n'.join (contents).lower()
+		else:
+			page = ''
+
+		if (page.find('server error') >= 0) or \
+				(page.find('exception') >= 0):
+			errMsg = self.buildErrorMessage(self.errorMsg, elapsed)
+
+		if (not errMsg) and (elapsed > self.allowed):
+			timeMsg = self.buildErrorMessage(self.timeoutMsg, elapsed)
+		
+		return (elapsed, timeMsg, failMsg, errMsg)
+
+###-----------------###
+###--- functions ---###
+###-----------------###
+
+def bailout (msg, showUsage=False):
+	if showUsage:
+		sys.stderr.write (USAGE)
+	sys.stderr.write ('Error: %s\n' % msg)
+	sys.exit(1)
+
+def getPages (rcdfile):
+	globalAllowed = rcdfile.getConstant ('ALLOWED')
+	globalMaxtime = rcdfile.getConstant ('MAXTIME')
+	globalTimeout = rcdfile.getConstant ('TIMEOUT')
+	globalFailure = rcdfile.getConstant ('FAILURE')
+
+	if not globalAllowed:
+		bailout ('Global constant ALLOWED missing from file')
+	if not globalMaxtime:
+		bailout ('Global constant MAXTIME missing from file')
+	if not globalTimeout:
+		bailout ('Global constant TIMEOUT missing from file')
+	if not globalFailure:
+		bailout ('Global constant FAILURE missing from file')
+
+	pages = []
+
+	for (name, rcd) in rcdfile.items():
+		page = rcd['PAGE']
+		if not page:
+			bailout ('Page "%s" missing required PAGE parameter' \
+				% name)
+
+		allowed = rcd['ALLOWED']
+		if not allowed:
+			allowed = globalAllowed
+
+		maxtime = rcd['MAXTIME']
+		if not maxtime:
+			maxtime = globalMaxtime
+
+		timeout = rcd['TIMEOUT']
+		if not timeout:
+			timeout = globalTimeout
+
+		failure = rcd['FAILURE']
+		if not failure:
+			failure = globalFailure
+
+		values = rcd['VALUES']
+		if not values:
+			urls = [ page ]
+		else:
+			urls = []
+			for value in values.split(','):
+				urls.append (page + value.strip())
+
+		for url in urls:
+			pages.append (Page (name, url, allowed, maxtime,
+				timeout, failure ) )
+	return pages
+
+def processCommandLine():
+	try:
+		(options, args) = getopt.getopt(sys.argv[1:],
+			's:h:d:t:f:e:l:n:r')
+	except getopt.GetoptError:
+		bailout ('Improper command-line option(s)', True)
+
+	for (option, value) in options:
+		if option == '-r':
+			print SAMPLE_RCD
+			sys.exit(0)
+		else:
+			bailout ('Unrecognized option: %s' % option, True)
+
+	if len(args) > 1:
+		bailout ('Too many command-line arguments', True)
+	if len(args) == 0:
+		bailout ('Missing <input file> command-line argument', True)
+
+	try:
+		rcdfile = rcdlib.RcdFile (args[0], rcdlib.Rcd, 'NAME')
+	except rcdlib.error, message:
+		bailout (message, True)
+	except IOError:
+		bailout ('Cannot read file: %s' % args[0], True)
+
+	return getPages (rcdfile)
+
+def hasErrors (stats):
+	hasErrors = False
+	for obj in stats.values():
+		if obj[1] or obj[2] or obj[3]:
+			hasErrors = True
+	
+	return hasErrors
+
+def generateReport (header, stats, startTimes):
+	top = [ header,
+		'%d pages checked' % 
+			(len(stats) ),
+		 ]
+	
+	lines = []
+
+	urls = stats.keys()
+	urls.sort()
+
+	allTimeCt = allFailCt = allErrCt = 0
+
+	for url in urls:
+		[ times, timeMsg, failMsg, errMsg ] = stats[url]
+		lines.append (url)
+
+		if times:
+			lines.append ('\ttime: %0.1f sec' % times[0])
+
+		if timeMsg:
+			lines.append ('\tTime over threshold: %s' % timeMsg)
+			allTimeCt += 1
+		if failMsg:
+			lines.append ('\tTimeout (stopped waiting): %s' % failMsg)
+			allFailCt += 1
+		if errMsg:
+			lines.append ('\tPage error: %s\n\n' % errMsg)
+			allErrCt += 1
+
+	top.append ('\tTimes over threshold: %d' % allTimeCt)
+	top.append ('\tTimeouts (stopped waiting): %d' % allFailCt)
+	top.append ('\tPages with errors: %d\n' % allErrCt)
+
+	return '\n'.join (top + lines)
+
+def finalReport(stats,startTimes):
+	report = generateReport ('\nFinal Report:',
+		stats, startTimes)
+
+	logMessage (report)
+
+	if hasErrors(stats):
+		bailout("Some pages have errors")
+
+def logMessage (message):
+	print message
+
+def measure(pages):
+	totalStats = {}
+	startTimes = []
+
+	startTimes.append (time.strftime ('%m/%d/%Y %H:%M:%S',
+		time.localtime (time.time()) ))
+
+	for page in pages:
+		elapsed, timeMsg, failMsg, errMsg = page.measure()
+
+		hadError = timeMsg or failMsg or errMsg
+		if hadError:
+			elapsedList = []
+		else:
+			elapsedList = [ elapsed ]
+
+		url = page.getUrl()
+		if not totalStats.has_key (url):
+			stats = [ elapsedList, timeMsg, failMsg, errMsg ]
+			totalStats[url] = stats
+		else:
+			stats = totalStats[url]
+			totalStats[url] = [ stats[0] + elapsedList,
+				stats[1] + timeMsg,
+				stats[2] + failMsg,
+				stats[3] + errMsg ]
+	return totalStats,startTimes
+
+def main():
+	pages = processCommandLine()
+	(stats, startTimes) = measure(pages)
+	finalReport(stats, startTimes)
+
+###-----------------------###
+###--- sample rcd file ---###
+###-----------------------###
+
+SAMPLE_RCD = '''
+###---------------------------------------###
+###--- default settings for urlmonitor ---###
+###---------------------------------------###
+
+# default setting; maximum seconds allowed for successful page request.
+# may be overridden in individual records using a new ALLOWED setting within
+# the record.
+ALLOWED=15
+
+# default setting; maximum seconds to wait for a response before we cease
+# waiting.  may be overridden in individual records using a new MAXTIME
+# setting within the record.
+MAXTIME=60
+
+# special flags which may be used in TIMEOUT and FAILURE settings:
+#    <NAME> - the NAME of the requested page
+#    <URL> - the URL of the requested page
+#    <ELAPSED> - the time measured before the request came back
+#    <ALLOWED> - the time allowed for a successful request
+#    <MAXTIME> - the time at which we stop waiting for a return
+#    <NL> - line break
+#    <DATE> - current date
+#    <TIME> - current time
+
+# default setting; message to be emailed upon page taking between ALLOWED and
+# MAXTIME seconds; may be overridden in individual records by using a new
+# TIMEOUT setting within the record.
+TIMEOUT=Timeout Ocurred. Elapsed time: <ELAPSED> seconds<NL>(up to <ALLOWED> seconds is considered successful)<NL><DATE> <TIME>
+
+# default setting; message to be emailed upon page taking more than MAXTIME
+# seconds; may be overridden in individual records by using a new FAILURE
+# setting within the record.
+FAILURE=Failed to return within the allowed <MAXTIME> seconds.<NL><DATE> <TIME>
+
+###--------------------------------------------------------------###
+###--- special config options for convenience in writing URLs ---###
+###--------------------------------------------------------------###
+
+# base URL for Python WI
+WI=http://valinor.informatics.jax.org/
+
+# base URL for Java WI
+JAVAWI=http://valinor.informatics.jax.org/javawi2/servlet/WIFetch?page=
+
+FEWI=http://valinor.informatics.jax.org/
+
+###-------------------------------###
+###--- individual page records ---###
+###-------------------------------###
+
+# Each individual record has the following parameters:
+#    required: NAME (must be unique), PAGE
+#    optional: ALLOWED, MAXTIME, TIMEOUT, FAILURE, VALUES, ERROR
+# If a VALUES parameter is defined, its value is a comma-delimited list of
+# values which we append to the PAGE parameter one-by-one to test them as
+# individual page requests.  (This would allow us, for example, to easily
+# test multiple marker detail pages.)
+
+[
+NAME=Marker Detail
+PAGE=${FEWI}marker/
+VALUES=MGI:97490,MGI:96677
+]
+
+[
+NAME=Marker Summary
+PAGE=${FEWI}/marker/summary?nomen=Kit
+]
+
+[
+NAME=Marker Query Form
+PAGE=${FEWI}marker
+]
+'''
+
+###--------------------###
+###--- main program ---###
+###--------------------###
+
+if __name__ == '__main__':
+	main()
+
