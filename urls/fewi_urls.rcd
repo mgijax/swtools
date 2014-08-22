@@ -1,0 +1,516 @@
+
+###---------------------------------------###
+###--- default settings for urlmonitor ---###
+###---------------------------------------###
+
+# default setting; maximum seconds allowed for successful page request.
+# may be overridden in individual records using a new ALLOWED setting within
+# the record.
+ALLOWED=15
+
+# default setting; maximum seconds to wait for a response before we cease
+# waiting.  may be overridden in individual records using a new MAXTIME
+# setting within the record.
+MAXTIME=30
+
+# special flags which may be used in TIMEOUT and FAILURE settings:
+#    <NAME> - the NAME of the requested page
+#    <URL> - the URL of the requested page
+#    <ELAPSED> - the time measured before the request came back
+#    <ALLOWED> - the time allowed for a successful request
+#    <MAXTIME> - the time at which we stop waiting for a return
+#    <NL> - line break
+#    <DATE> - current date
+#    <TIME> - current time
+
+# default setting; message to be emailed upon page taking between ALLOWED and
+# MAXTIME seconds; may be overridden in individual records by using a new
+# TIMEOUT setting within the record.
+TIMEOUT=Timeout Ocurred. Elapsed time: <ELAPSED> seconds<NL>(up to <ALLOWED> seconds is considered successful)<NL><DATE> <TIME>
+
+# default setting; message to be emailed upon page taking more than MAXTIME
+# seconds; may be overridden in individual records by using a new FAILURE
+# setting within the record.
+FAILURE=Failed to return within the allowed <MAXTIME> seconds.<NL><DATE> <TIME>
+
+###--------------------------------------------------------------###
+###--- special config options for convenience in writing URLs ---###
+###--------------------------------------------------------------###
+
+# base URL for Python WI
+WI=http://valinor.informatics.jax.org/
+
+# base URL for Java WI
+JAVAWI=http://valinor.informatics.jax.org/javawi2/servlet/WIFetch?page=
+
+FEWI=http://valinor.informatics.jax.org/
+
+###-------------------------------###
+###--- individual page records ---###
+###-------------------------------###
+
+# Each individual record has the following parameters:
+#    required: NAME (must be unique), PAGE
+#    optional: ALLOWED, MAXTIME, TIMEOUT, FAILURE, VALUES, ERROR
+# If a VALUES parameter is defined, its value is a comma-delimited list of
+# values which we append to the PAGE parameter one-by-one to test them as
+# individual page requests.  (This would allow us, for example, to easily
+# test multiple marker detail pages.)
+
+
+# Accession pages
+[
+NAME=Accession Query
+PAGE=${FEWI}accession
+]
+[
+NAME=Accession ID Link
+PAGE=${FEWI}accession/J:2
+]
+[
+NAME=Accession Summary
+PAGE=${FEWI}accession/summary?id=
+VALUES=J:2,0610005A07
+]
+[
+NAME=Accession Json
+PAGE=${FEWI}accession/json?id=0610005A07&results=25&startIndex=0&sort=field1&dir=asc
+]
+
+# Allele pages
+[
+NAME=Allele Query Form
+PAGE=${FEWI}allele
+]
+[
+NAME=Allele Query Pheno System Popup
+PAGE=${FEWI}allele/phenoPopup?formName=alleleQF
+]
+[
+NAME=Allele Summary
+PAGE=${FEWI}allele/summary?phenotype=&nomen=Klf
+]
+[
+NAME=Allele Summary Json
+PAGE=${FEWI}allele/summary/json?results=100&startIndex=0&sort=default&dir=desc&
+VALUES=nomen=Klf,jnumId=J:2
+]
+[
+NAME=Allele Summary Text Report
+PAGE=${FEWI}allele/report.txt?results=100&startIndex=0&sort=default&dir=desc&
+VALUES=nomen=Klf
+]
+[
+NAME=Allele Summary Excel Report
+PAGE=${FEWI}allele/report.xlsx?results=100&startIndex=0&sort=default&dir=desc&
+VALUES=nomen=Klf
+]
+[
+NAME=Allele Summary By Reference
+PAGE=${FEWI}allele/reference/J:2
+]
+[
+NAME=Allele Detail
+PAGE=${FEWI}allele/
+VALUES=MGI:1856155,MGI:1855937
+]
+[
+NAME=Allele Detail by Key
+PAGE=${FEWI}allele/key/260
+]
+[
+NAME=Allele Phenotype Table
+PAGE=${FEWI}allele/phenotable/
+VALUES=MGI:1856155
+]
+[
+NAME=Allele Genotype Popup
+PAGE=${FEWI}allele/genoview/MGI:3822315?counter=10
+]
+[
+NAME=Allele All Genotype Popups View
+PAGE=${FEWI}allele/allgenoviews/MGI:2182122
+]
+[
+NAME=Allele All Disease-related Genotype Popups View
+PAGE=${FEWI}allele/alldiseasegenoviews/MGI:1855937
+]
+[
+NAME=Allele Disease Table
+PAGE=${FEWI}allele/diseasetable/MGI:1855937
+]
+
+# Assay Pages
+[
+NAME=Assay Detail Page
+PAGE=${FEWI}assay/
+VALUES=MGI:3816395,MGI:3036523
+]
+[
+NAME=Assay Detail Page By Key
+PAGE=${FEWI}assay/key
+VALUES=13928,32814
+]
+
+# Autocomplete Urls
+[
+NAME=Author Autocomplete
+PAGE=${FEWI}autocomplete/author?query=epp
+]
+[
+NAME=Author GXD Autocomplete
+PAGE=${FEWI}autocomplete/author/gxd?query=epp
+]
+[
+NAME=Journal Autocomplete
+PAGE=${FEWI}autocomplete/journal?query=nat
+]
+[
+NAME=Journal GXD Autocomplete
+PAGE=${FEWI}autocomplete/journal/gxd?query=nat
+]
+[
+NAME=EMAPA Browser Autocomplete
+PAGE=${FEWI}autocomplete/emapa?query=nervous
+]
+[
+NAME=GXD Query Form EMAPA Autocomplete
+PAGE=${FEWI}autocomplete/gxdEmapa?query=nervous
+]
+[
+NAME=Cre Query Form EMAPA Autocomplete
+PAGE=${FEWI}autocomplete/structure?query=nervous
+]
+[
+NAME=Vocab Term Autocomplete
+PAGE=${FEWI}autocomplete/vocabTerm?query=venom
+]
+[
+NAME=Disease Portal Phenotype Autocomplete
+PAGE=${FEWI}autocomplete/diseasePortal/phenotypes?query=obese
+]
+[
+NAME=Vocab Term ID Resolver
+PAGE=${FEWI}autocomplete/vocabTerm/resolve?ids=MP:0000001,MP:0000002
+]
+[
+NAME=EMAPA ID Resolver
+PAGE=${FEWI}autocomplete/emapaID/resolve?ids=EMAPA:32748,EMAPA:16568
+]
+
+# Batch Pages
+[
+NAME=Batch Query Form
+PAGE=${FEWI}batch
+]
+[
+NAME=Batch Summary
+PAGE=${FEWI}batch/summary
+]
+[
+NAME=Batch Summary Json
+PAGE=${FEWI}batch/json?ids=kit
+]
+[
+NAME=Batch Text Report
+PAGE=${FEWI}batch/report.txt?ids=kit
+]
+[
+NAME=Batch Excel Report
+PAGE=${FEWI}batch/report.xlsx?ids=kit
+]
+
+# Disease Pages
+[
+NAME=Disease Detail
+PAGE=${FEWI}disease/114480
+]
+[
+NAME=Disease Detail By Key
+PAGE=${FEWI}disease/key/847478
+]
+
+# Disease Portal (HMDC) Pages
+[
+NAME=Disease Portal Query Form
+PAGE=${FEWI}diseasePortal
+]
+[
+NAME=Disease Portal Summary
+PAGE=${FEWI}diseasePortal/summary?genes=pax1
+]
+[
+NAME=Disease Portal Query isLocationsFileCached json
+PAGE=${FEWI}diseasePortal/isLocationsFileCached
+]
+[
+NAME=Disease Portal Query isGeneFileCached json
+PAGE=${FEWI}diseasePortal/isGeneFileCached
+]
+[
+NAME=Disease Portal Summary Grid
+PAGE=${FEWI}diseasePortal/grid?genes=pax1
+]
+[
+NAME=Disease Portal Summary Grid System Popup
+PAGE=${FEWI}diseasePortal/gridSystemCell?genes=pax1&gridClusterKey=1632738&termHeader=immune%20system
+]
+[
+NAME=Disease Portal Summary Grid Disease Popup
+PAGE=${FEWI}diseasePortal/gridDiseaseCell?genes=pax1&gridClusterKey=1632738&termHeader=Otofaciocervical%20Syndrome%202;%20OFC2
+]
+[
+NAME=Disease Portal Summary Grid Genotype Cluster View
+PAGE=${FEWI}diseasePortal/genoCluster/view/17217
+]
+[
+NAME=Disease Portal Summary Markers Json
+PAGE=${FEWI}diseasePortal/markers/json?genes=pax1
+]
+[
+NAME=Disease Portal Summary Diseases Json
+PAGE=${FEWI}diseasePortal/diseases/json?genes=pax1
+]
+[
+NAME=Disease Portal Summary Grid Total Count
+PAGE=${FEWI}diseasePortal/grid/totalCount?genes=pax1
+]
+[
+NAME=Disease Portal Summary Markers Total Count
+PAGE=${FEWI}diseasePortal/markers/totalCount?genes=pax1
+]
+[
+NAME=Disease Portal Summary Diseases Total Count
+PAGE=${FEWI}diseasePortal/diseases/totalCount?genes=pax1
+]
+
+# Glossary Pages
+[
+NAME=Glossary Index
+PAGE=${FEWI}glossary
+]
+[
+NAME=Glossary Detail
+PAGE=${FEWI}glossary/allele
+]
+
+# GO Pages
+[
+NAME=Go Summary For Reference
+PAGE=${FEWI}go/reference/J:108510
+]
+[
+NAME=Go Summary For Reference JSON
+PAGE=${FEWI}go/json?referenceKey=109584&vocab=GO&results=10&startIndex=0
+]
+[
+NAME=Go Summary For Marker
+PAGE=${FEWI}go/marker/MGI:96677
+]
+[
+NAME=Go Summary For Marker JSON
+PAGE=${FEWI}go/json?mrkKey=10603&vocab=GO&results=10&startIndex=0
+]
+
+# GXD Pages
+[
+NAME=GXD Query Form
+PAGE=${FEWI}gxd
+]
+[
+NAME=GXD Summary
+PAGE=${FEWI}gxd/summary?theilerStage=1
+]
+[
+NAME=GXD Summary Assay Result Text Report
+PAGE=${FEWI}gxd/report.txt?theilerStage=1
+]
+[
+NAME=GXD Summary Assay Result Excel Report
+PAGE=${FEWI}gxd/report.xlsx?theilerStage=1
+]
+[
+NAME=GXD Summary Marker Text Report
+PAGE=${FEWI}gxd/marker/report.txt?theilerStage=1
+]
+[
+NAME=GXD Summary Marker Excel Report
+PAGE=${FEWI}gxd/marker/report.xlsx?theilerStage=1
+]
+[
+NAME=GXD Summary By EMAPA ID
+PAGE=${FEWI}gxd/structure/EMAPA:16568
+]
+[
+NAME=GXD Summary By Allele
+PAGE=${FEWI}gxd/allele/MGI:1856155
+]
+[
+NAME=GXD Summary By Marker
+PAGE=${FEWI}gxd/marker/MGI:98326
+]
+[
+NAME=GXD Summary Forward To Batch
+PAGE=${FEWI}gxd/batch?nomen=pax1
+]
+[
+NAME=GXD Summary Markers JSON
+PAGE=${FEWI}gxd/markers/json?nomen=pax1
+]
+[
+NAME=GXD Summary Assays JSON
+PAGE=${FEWI}gxd/assays/json?nomen=pax1
+]
+[
+NAME=GXD Summary Results JSON
+PAGE=${FEWI}gxd/results/json?nomen=pax1
+]
+[
+NAME=GXD Summary Images JSON
+PAGE=${FEWI}gxd/images/json?nomen=pax1
+]
+[
+NAME=GXD Stage Matrix Popup JSON
+PAGE=${FEWI}gxd/stageMatrixPopup/json?nomenclature=pax1&rowId=EMAPA:25765&colId=15
+]
+[
+NAME=GXD Gene Matrix Popup JSON
+PAGE=${FEWI}gxd/geneMatrixPopup/json?nomenclature=pax1&rowId=EMAPA:25765&colId=Pax1
+]
+[
+NAME=GXD Stage Matrix JSON
+PAGE=${FEWI}gxd/stagegrid/json?nomenclature=pax1
+]
+[
+NAME=GXD Gene Matrix JSON
+PAGE=${FEWI}gxd/genegrid/json?nomenclature=pax1
+]
+[
+NAME=GXD Summary Markers Total Count
+PAGE=${FEWI}gxd/markers/totalCount?nomen=pax1
+]
+[
+NAME=GXD Summary Assays Total Count
+PAGE=${FEWI}gxd/assays/totalCount?nomen=pax1
+]
+[
+NAME=GXD Summary Results Total Count
+PAGE=${FEWI}gxd/results/totalCount?nomen=pax1
+]
+[
+NAME=GXD Summary Images Total Count
+PAGE=${FEWI}gxd/images/totalCount?nomen=pax1
+]
+[
+NAME=GXD Summary GXDLit Count
+PAGE=${FEWI}gxd/gxdLitCount?nomen=pax1
+]
+[
+NAME=GXD Summary GXDLit Forward
+PAGE=${FEWI}gxd/gxdLitForward?nomen=pax1
+]
+[
+NAME=GXD Summary System Facet
+PAGE=${FEWI}gxd/facet/system?nomen=pax1
+]
+[
+NAME=GXD Summary Assay Type Facet
+PAGE=${FEWI}gxd/facet/assayType?nomen=pax1
+]
+[
+NAME=GXD Summary Detected Facet
+PAGE=${FEWI}gxd/facet/detected?nomen=pax1
+]
+[
+NAME=GXD Summary Theiler Stage Facet
+PAGE=${FEWI}gxd/facet/theilerStage?nomen=pax1
+]
+[
+NAME=GXD Summary Wild Type Facet
+PAGE=${FEWI}gxd/facet/wildtype?nomen=pax1
+]
+
+# GXD Lit Pages
+[
+NAME=GXD Lit Query Form
+PAGE=${FEWI}gxdlit
+]
+[
+NAME=GXD Lit Detail Page
+PAGE=${FEWI}gxdlit/key/132909
+]
+[
+NAME=GXD Lit Summary By Marker
+PAGE=${FEWI}gxdlit/marker/MGI:1338056
+]
+[
+NAME=GXD Lit Summary By Reference
+PAGE=${FEWI}gxdlit/reference/J:108510
+]
+[
+NAME=GXD Lit Summary By Age and Assay
+PAGE=${FEWI}gxdlit/summary/ageAssay?age=12.5&assayType=RT-PCR&reference_key=109584
+]
+
+# Homology Pages
+[
+NAME=Homology Detail
+PAGE=${FEWI}homology/187
+]
+[
+NAME=Homology Detail By Marker
+PAGE=${FEWI}homology/marker/MGI:96677
+]
+[
+NAME=Homology Comparative GO Graph
+PAGE=${FEWI}homology/GOGraph/187
+]
+
+# Image Pages
+[
+NAME=Phenotype Image Detail
+PAGE=${FEWI}image/pheno/MGI:3717715
+]
+[
+NAME=Phenotype Image Detail By Key
+PAGE=${FEWI}image/pheno/key/49822
+]
+[
+NAME=Pheno Image Summary
+PAGE=${FEWI}image/phenoSummary/allele/MGI:1856155
+]
+[
+NAME=Molecular Image Detail
+PAGE=${FEWI}image/molecular/MGI:5448402
+]
+[
+NAME=GXD Image Summary
+PAGE=${FEWI}image/gxdSummary/marker/12179
+]
+[
+NAME=GXD Image Detail
+PAGE=${FEWI}image/expression/MGI:2150324
+]
+[
+NAME=Generic Image Detail
+PAGE=${FEWI}image/
+VALUES=MGI:3717715,MGI:2150324
+]
+
+# Marker Pages
+[
+NAME=Marker Detail
+PAGE=${FEWI}marker/
+VALUES=MGI:97490,MGI:96677
+]
+
+[
+NAME=Marker Summary
+PAGE=${FEWI}/marker/summary?nomen=Kit
+]
+
+[
+NAME=Marker Query Form
+PAGE=${FEWI}marker
+]
+

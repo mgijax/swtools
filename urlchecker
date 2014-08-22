@@ -80,15 +80,16 @@ class Page:
 		reader = httpReader.httpReader(self.url, {}, self.maxtime)
 		(contents, error) = reader.getPage();
 		statusCode = reader.code
-		if statusCode != 200:
+		# only count successes and redirects
+		if statusCode not in [200,302]:
 			error = "ERROR: status code = %d"%statusCode
 
 		stopTime = time.time()
 		elapsed = stopTime - startTime
 
-		failMsg = None
-		timeMsg = None
-		errMsg = None
+		failMsg = ''
+		timeMsg = ''
+		errMsg = ''
 
 		if error:
 			if error.find ('timed out') >= 0:
@@ -103,7 +104,7 @@ class Page:
 
 		if (page.find('server error') >= 0) or \
 				(page.find('exception') >= 0):
-			errMsg = self.buildErrorMessage(self.errorMsg, elapsed)
+			errMsg = self.buildErrorMessage("Server Error", elapsed)
 
 		if (not errMsg) and (elapsed > self.allowed):
 			timeMsg = self.buildErrorMessage(self.timeoutMsg, elapsed)
@@ -208,7 +209,7 @@ def hasErrors (stats):
 	
 	return hasErrors
 
-def generateReport (header, stats, startTimes):
+def generateReport (header, stats, startTimes,showSuccesses=False):
 	top = [ header,
 		'%d pages checked' % 
 			(len(stats) ),
@@ -223,8 +224,11 @@ def generateReport (header, stats, startTimes):
 
 	for url in urls:
 		[ times, timeMsg, failMsg, errMsg ] = stats[url]
-		lines.append (url)
+		# don't report the successes
+		if not showSuccesses and not timeMsg and not failMsg and not errMsg:
+			continue
 
+		lines.append (url)
 		if times:
 			lines.append ('\ttime: %0.1f sec' % times[0])
 
