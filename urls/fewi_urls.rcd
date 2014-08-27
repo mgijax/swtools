@@ -497,20 +497,239 @@ PAGE=${FEWI}image/
 VALUES=MGI:3717715,MGI:2150324
 ]
 
+# Interaction Pages
+[
+NAME=Interaction Explorer
+PAGE=${FEWI}interaction/explorer?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer idList
+PAGE=${FEWI}interaction/idList?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer json
+PAGE=${FEWI}interaction/json?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Text Report
+PAGE=${FEWI}interaction/report.txt?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Excel
+PAGE=${FEWI}interaction/report.xlsx?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Forward to Batch
+PAGE=${FEWI}interaction/batch?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Validation Facet
+PAGE=${FEWI}interaction/facet/validation?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Interaction Facet
+PAGE=${FEWI}interaction/facet/interaction?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Data Source Facet
+PAGE=${FEWI}interaction/facet/dataSource?markerIDs=MGI:97490
+]
+[
+NAME=Interaction Explorer Score Facet
+PAGE=${FEWI}interaction/facet/score?markerIDs=MGI:97490
+]
+
 # Marker Pages
 [
 NAME=Marker Detail
 PAGE=${FEWI}marker/
 VALUES=MGI:97490,MGI:96677
 ]
-
 [
-NAME=Marker Summary
-PAGE=${FEWI}/marker/summary?nomen=Kit
+NAME=Marker Detail by Key
+PAGE=${FEWI}marker/key/12180
 ]
-
 [
 NAME=Marker Query Form
 PAGE=${FEWI}marker
 ]
+[
+NAME=Marker Query Form Pheno System Popup
+PAGE=${FEWI}marker/phenoPopup
+]
+[
+NAME=Marker Summary
+PAGE=${FEWI}/marker/summary?nomen=Kit
+]
+[
+NAME=Marker Summary by Reference
+PAGE=${FEWI}/marker/reference/J:2
+]
+[
+NAME=Marker Summary by Reference Key
+PAGE=${FEWI}/marker/reference/key/2
+]
+[
+NAME=Marker Microarray Probeset Summary
+PAGE=${FEWI}/marker/probeset/MGI:97490
+]
+[
+NAME=Marker Summary JSON
+PAGE=${FEWI}/marker/json?nomen=Kit
+]
+[
+NAME=Marker Summary Text Report
+PAGE=${FEWI}/marker/report.txt?nomen=Kit
+]
+[
+NAME=Marker Summary Excel Report
+PAGE=${FEWI}/marker/report.xlsx?nomen=Kit
+]
 
+# Marker Tissue Count Pages
+[
+NAME=Marker Tissue Summary
+PAGE=${FEWI}tissue/marker/MGI:97490
+]
+[
+NAME=Marker Tissue Summary by Key
+PAGE=${FEWI}tissue/marker?key=12180
+]
+[
+NAME=Marker Tissue Summary JSON
+PAGE=${FEWI}tissue/json?mrkKey=12180
+]
+[
+NAME=Marker Tissue Summary Text Report
+PAGE=${FEWI}tissue/marker/report.txt?mrkKey=12180
+]
+
+# MP Pages
+[
+NAME=MP Term Summary
+PAGE=${FEWI}mp/annotations/MP:0001261
+]
+
+# Recombinase Pages
+[
+NAME=Recombinase Summary
+PAGE=${FEWI}recombinase/summary?structure=brain
+]
+[
+NAME=Recombinase Summary JSON
+PAGE=${FEWI}recombinase/json?structure=brain
+]
+[
+NAME=Recombinase Specificity Page
+PAGE=${FEWI}recombinase/specificity?id=MGI:5308442&systemKey=4856356
+]
+[
+NAME=Recombinase Specificity Page JSON
+PAGE=${FEWI}recombinase/jsonSpecificity?id=MGI:5308442&systemKey=4856356
+]
+[
+NAME=Recombinase Table Section from Allele Detail
+PAGE=${FEWI}recombinase/allele/MGI:5308442
+]
+
+# Reference Pages
+[
+NAME=Reference Query Form
+PAGE=${FEWI}reference
+]
+[
+NAME=Reference Summary
+PAGE=${FEWI}reference/summary?year=2007
+]
+[
+NAME=Reference Summary JSON
+PAGE=${FEWI}reference/json?year=2007
+]
+[
+NAME=Reference Summary Test Report
+PAGE=${FEWI}reference/report.txt?year=2007
+]
+[
+NAME=Reference Detail
+PAGE=${FEWI}reference/J:2
+]
+[
+NAME=Reference Detail by Key
+PAGE=${FEWI}reference/key/2
+]
+[
+NAME=Reference Detail by Key v2
+PAGE=${FEWI}reference/key?key=2
+]
+[
+NAME=Reference Summary by Allele
+PAGE=${FEWI}reference/allele/MGI:1856155
+]
+[
+NAME=Reference Summary by Allele key
+PAGE=${FEWI}reference/summary?_Allele_key=260
+]
+[
+NAME=Reference Summary by Sequence
+PAGE=${FEWI}reference/sequence/AB000096
+]
+[
+NAME=Reference Summary by Marker
+PAGE=${FEWI}reference/marker/MGI:97490
+]
+[
+NAME=Reference Summary by Disease Relevant Marker
+PAGE=${FEWI}reference/diseaseRelevantMarker/MGI:97490
+]
+[
+NAME=Reference Summary by Disease
+PAGE=${FEWI}reference/disease/601665
+]
+[
+NAME=Reference Summary Author Facet
+PAGE=${FEWI}reference/facet/author?year=2007
+]
+[
+NAME=Reference Summary Journal Facet
+PAGE=${FEWI}reference/facet/journal?year=2007
+]
+[
+NAME=Reference Summary Year Facet
+PAGE=${FEWI}reference/facet/year?year=2007
+]
+[
+NAME=Reference Summary Data Facet
+PAGE=${FEWI}reference/facet/data?year=2007
+]
+
+# Sequence Pages
+[
+NAME=Sequence Detail
+PAGE=${FEWI}sequence/AB000096
+]
+[
+NAME=Sequence Summary by Reference
+PAGE=${FEWI}sequence/reference/J:2
+]
+[
+NAME=Sequence Summary by Marker
+PAGE=${FEWI}sequence/marker/MGI:97490
+]
+[
+NAME=Sequence Summary JSON
+PAGE=${FEWI}sequence/json?refKey=260
+]
+
+# Vocab Pages
+[
+NAME=OMIM Browser
+PAGE=${FEWI}vocab/omim
+]
+[
+NAME=OMIM Browser by Letter
+PAGE=${FEWI}vocab/omim/M
+]
+[
+NAME=EMAPA Detail
+PAGE=${FEWI}vocab/gxd/anatomy/EMAPA:16568
+]
