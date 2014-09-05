@@ -1,0 +1,104 @@
+
+###---------------------------------------###
+###--- default settings for urlmonitor ---###
+###---------------------------------------###
+
+# default setting; maximum seconds allowed for successful page request.
+# may be overridden in individual records using a new ALLOWED setting within
+# the record.
+ALLOWED=15
+
+# default setting; maximum seconds to wait for a response before we cease
+# waiting.  may be overridden in individual records using a new MAXTIME
+# setting within the record.
+MAXTIME=30
+
+# special flags which may be used in TIMEOUT and FAILURE settings:
+#    <NAME> - the NAME of the requested page
+#    <URL> - the URL of the requested page
+#    <ELAPSED> - the time measured before the request came back
+#    <ALLOWED> - the time allowed for a successful request
+#    <MAXTIME> - the time at which we stop waiting for a return
+#    <NL> - line break
+#    <DATE> - current date
+#    <TIME> - current time
+
+# default setting; message to be emailed upon page taking between ALLOWED and
+# MAXTIME seconds; may be overridden in individual records by using a new
+# TIMEOUT setting within the record.
+TIMEOUT=Timeout Ocurred. Elapsed time: <ELAPSED> seconds<NL>(up to <ALLOWED> seconds is considered successful)<NL><DATE> <TIME>
+
+# default setting; message to be emailed upon page taking more than MAXTIME
+# seconds; may be overridden in individual records by using a new FAILURE
+# setting within the record.
+FAILURE=Failed to return within the allowed <MAXTIME> seconds.<NL><DATE> <TIME>
+
+###--------------------------------------------------------------###
+###--- special config options for convenience in writing URLs ---###
+###--------------------------------------------------------------###
+
+# base URL for Python WI
+WI=http://valinor.informatics.jax.org/
+
+# base URL for Java WI
+JAVAWI=http://valinor.informatics.jax.org/javawi2/servlet/WIFetch?page=
+
+FEWI=http://valinor.informatics.jax.org/
+
+###-------------------------------###
+###--- individual page records ---###
+###-------------------------------###
+
+# Each individual record has the following parameters:
+#    required: NAME (must be unique), PAGE
+#    optional: ALLOWED, MAXTIME, TIMEOUT, FAILURE, VALUES, ERROR
+# If a VALUES parameter is defined, its value is a comma-delimited list of
+# values which we append to the PAGE parameter one-by-one to test them as
+# individual page requests.  (This would allow us, for example, to easily
+# test multiple marker detail pages.)
+
+# MGIHOME Pages
+[
+NAME=Gene Home
+PAGE=${WI}genes.shtml
+]
+[
+NAME=Phenotype Home
+PAGE=${WI}phenotypes.shtml
+]
+[
+NAME=Human Disease Home
+PAGE=${WI}humanDisease.shtml
+]
+[
+NAME=GXD Home
+PAGE=${WI}expression.shtml
+]
+[
+NAME=Recombinase Home
+PAGE=${WI}recombinase.shtml
+]
+[
+NAME=Function Home
+PAGE=${WI}function.shtml
+]
+[
+NAME=Strains & SNPs Home
+PAGE=${WI}strains_SNPs.shtml
+]
+[
+NAME=Homology Home
+PAGE=${WI}homology.shtml
+]
+[
+NAME=Pathways Home
+PAGE=${WI}pathways.shtml
+]
+[
+NAME=Batch Data Home
+PAGE=${WI}batch_data.shtml
+]
+[
+NAME=Nomenclature Home
+PAGE=${WI}mgihome/nomen/index.shtml
+]
