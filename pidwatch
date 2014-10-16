@@ -8,18 +8,29 @@ USAGE="Usage: $0 <pid>\n
     (useful for watching the memory footprint of a given script)\n
 "
 
-if [ "$1" -eq "" ]; then
+if [ "$1" = "" ]; then
 echo $USAGE
 exit 1
 fi
 
-PID=$1
-PROCCOUNT=`prstat -p ${PID} 1 1 | grep "${PID}" | wc -l`
+PID="$1"
 
-while [ "${PROCCOUNT}" -eq "1" ]; do
-prstat -p ${PID} 1 1 | grep "${PID}"
+WHICHPRSTAT=`which prstat 2>&1 > /dev/null`
+if [ "$?" = "0" ]; then
+	prstat -p ${PID} 1 1 | grep PID
+	CMD="prstat -p ${PID} 1 1"
+else
+	top -n 1 -b -p ${PID} | grep PID
+	CMD="top -n 1 -b -p ${PID}"
+fi
+
+PID=$1
+PROCCOUNT=`${CMD} | grep ${PID} | wc -l`
+
+while [ "${PROCCOUNT}" = "1" ]; do
+${CMD} | grep ${PID}
 sleep 5
-PROCCOUNT=`prstat -p ${PID} 1 1 | grep "${PID}" | wc -l`
+PROCCOUNT=`${CMD} | grep ${PID} | wc -l`
 done
 ENDTIME=`uptime | awk "{print $1}"`
 echo "Process ${PID} finished at ${ENDTIME}"
