@@ -32,5 +32,5 @@ ${CMD} | grep ${PID}
 sleep 5
 PROCCOUNT=`${CMD} | grep ${PID} | wc -l`
 done
-ENDTIME=`uptime | awk "{print $1}"`
+ENDTIME=`uptime | awk '{print $1}'`
 echo "Process ${PID} finished at ${ENDTIME}"
