@@ -197,7 +197,7 @@ if __name__ == '__main__':
 
 	files = []
 	for item in sys.argv[1:]:
-		files = files = glob.glob(item)
+		files = files + glob.glob(item)
 
 	print '-' * 40
 	for filename in files:
