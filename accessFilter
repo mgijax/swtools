@@ -38,6 +38,7 @@ USAGE = '''Usage: %s [-r|-s|-i|-j|-C|-m|-g|-v|-b <date>|-a <date>] [-f <filename
     	-w : number of filtering subprocesses use (default is 1; 1-12 allowed)
 	-d : debug mode (write debugging info to stderr)
 	-c : use no-cache mode (resolve all IP addresses without using cache)
+	-n : do not resolve any IP addresses; assume it's already done
     Internal options:
     	-x : for internal use only; set up as subprocess for parallelization
     Notes:
@@ -72,6 +73,7 @@ CSS = False
 MGI = False
 GXD = False
 COUNTS = False
+RESOLVE = True
 
 NO_CACHE = False
 AFTER_DATE = None
@@ -155,7 +157,7 @@ def processCommandLine():
 	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
 	global AFTER_DATE, BEFORE_DATE, THREAD_COUNT, DEBUG, NO_CACHE
 	global JAVASCRIPT, CSS, SUBPROCESS, COUNTS
-	global REFER_STR, URL_STR
+	global REFER_STR, URL_STR, RESOLVE
 
 	try:
 		options, args = getopt.getopt (sys.argv[1:],
@@ -214,6 +216,8 @@ def processCommandLine():
 			REFER_STR = value
 		elif option == '-F':
 			URL_STR = value
+		elif option == '-n':
+			RESOLVE = False
 
 	if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
 			BEFORE_DATE or AFTER_DATE or JAVASCRIPT or CSS or \
@@ -278,7 +282,7 @@ def isRobot (ip, agentLower):
 		# if is numeric address, we need to resolve to name 
 		# (if possible)
 
-		if NUMERIC_RE.match(ip):
+		if RESOLVE and NUMERIC_RE.match(ip):
 			address = socket.getfqdn(ip)
 
 		for tag in ROBOT_TAGS:
