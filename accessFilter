@@ -161,7 +161,7 @@ def processCommandLine():
 
 	try:
 		options, args = getopt.getopt (sys.argv[1:],
-			'rsimgtvxf:o:a:b:w:dcjCF:R:')
+			'rsimgtvxf:o:a:b:w:dcjCF:R:n')
 	except getopt.GetoptError:
 		bailout ('Invalid command-line flag(s)')
 
