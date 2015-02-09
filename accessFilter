@@ -382,9 +382,11 @@ def keepLine (line):
 				output = False
 
 	if output and REFER_STR:
-		if numFields >= 7:
+		if numFields >= 11:
 			if fields[10].find(REFER_STR) == -1:
 				output = False
+		else:
+			output = False
 
 	if output and MGI:
 		if numFields >= 1:
