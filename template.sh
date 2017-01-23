@@ -10,7 +10,7 @@ then
     export MGICONFIG
 fi
 
-. ${MGICONFIG}/master.config.csh
+. ${MGICONFIG}/master.config.sh
 
 cd `dirname $0`
 
