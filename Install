@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# variable definitions (edit as needed)
+
+CONFIGURATION=Configuration
+
+# ensure that the config file exists
+
+if test ! -r $CONFIGURATION
+then
+	echo "Missing configuration file.  Please create $CONFIGURATION."
+	exit 1
+fi
+
+# read variables from the config file
+
+exec 4<&0
+exec < $CONFIGURATION
+while read name value junk
+do
+	case "$name" in
+		PYTHON)
+			PYTHON=$value;;
+		[A-z]*)
+			;;	# other parms are not needed by Install
+	esac
+done
+exec 0<&4
+
+# remove the python link before chmod, if there already
+if [ -h python ]; then
+	rm python
+fi
+
+# make Python link
+
+echo "Linking to python"
+ln -s $PYTHON python
+
+echo "Done"
