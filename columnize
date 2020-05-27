@@ -1,11 +1,11 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import getopt
 import string
 
 USAGE='''
-	%s [-L <lines per page>][-C <columns per page>][<input filename>]
+        %s [-L <lines per page>][-C <columns per page>][<input filename>]
 ''' % sys.argv[0]
 
 #FF = chr(12)
@@ -19,131 +19,131 @@ NUM_LINES = None
 FILE = sys.stdin
 
 def max_len (items):
-	mx = 0
-	for item in items:
-		mx = max (len(item), mx)
-	return mx
+        mx = 0
+        for item in items:
+                mx = max (len(item), mx)
+        return mx
 
 class Formatter:
-	def __init__ (self, items, num_lines = None, num_cols = None):
-		self.pages = []
-		self.items = items
-		if num_lines is not None:
-			self.num_lines = num_lines
-		else:
-			self.num_lines = DEFAULT_LINES
-		if num_cols is not None:
-			self.num_cols = num_cols
-			self.col_size = max (max_len (items) + 1,
-				MAX_CHAR / num_cols)
-			self.num_lines = min (self.num_lines,
-				len(items) / num_cols + 1)
-		else:
-			num_items = len (items)
-			min_col_size = max_len (items) + 1
-			desired_cols = num_items / self.num_lines
-			if (num_items % self.num_lines) != 0:
-				desired_cols = desired_cols + 1
-			while (min_col_size * desired_cols > MAX_CHAR):
-				desired_cols = desired_cols - 1
-			self.num_cols = desired_cols
-			self.col_size = MAX_CHAR / desired_cols
-		return
-	def check (self):
-		return (self.col_size * self.num_cols) <= MAX_CHAR
-	def build (self):
-		self.pages = []
-		current_page = Page(self)
-		self.pages.append (current_page)
-		for item in self.items:
-			if current_page.can_hold (item):
-				current_page.add (item)
-			else:
-				current_page = Page(self)
-				self.pages.append (current_page)
-				current_page.add (item)
-		return
-	def __str__ (self):
-		s = ''
-		for page in self.pages:
-			s = s + str (page)
-		return s
+        def __init__ (self, items, num_lines = None, num_cols = None):
+                self.pages = []
+                self.items = items
+                if num_lines is not None:
+                        self.num_lines = num_lines
+                else:
+                        self.num_lines = DEFAULT_LINES
+                if num_cols is not None:
+                        self.num_cols = num_cols
+                        self.col_size = max (max_len (items) + 1,
+                                MAX_CHAR / num_cols)
+                        self.num_lines = min (self.num_lines,
+                                len(items) / num_cols + 1)
+                else:
+                        num_items = len (items)
+                        min_col_size = max_len (items) + 1
+                        desired_cols = num_items / self.num_lines
+                        if (num_items % self.num_lines) != 0:
+                                desired_cols = desired_cols + 1
+                        while (min_col_size * desired_cols > MAX_CHAR):
+                                desired_cols = desired_cols - 1
+                        self.num_cols = desired_cols
+                        self.col_size = MAX_CHAR / desired_cols
+                return
+        def check (self):
+                return (self.col_size * self.num_cols) <= MAX_CHAR
+        def build (self):
+                self.pages = []
+                current_page = Page(self)
+                self.pages.append (current_page)
+                for item in self.items:
+                        if current_page.can_hold (item):
+                                current_page.add (item)
+                        else:
+                                current_page = Page(self)
+                                self.pages.append (current_page)
+                                current_page.add (item)
+                return
+        def __str__ (self):
+                s = ''
+                for page in self.pages:
+                        s = s + str (page)
+                return s
 class Page:
-	def __init__ (self, formatter):
-		self.rows = []
-		self.current_row = 0
-		self.formatter = formatter
-		return
-	def add (self, item):
-		if len (self.rows) < self.formatter.num_lines:
-			self.rows.append (Row (self.formatter))
-			self.rows[-1].add (item)
-		else:
-			self.rows [self.current_row].add (item)
-			self.current_row = (self.current_row + 1) % \
-				self.formatter.num_lines
-		return
-	def can_hold (self, item):
-		if len (self.rows) < self.formatter.num_lines:
-			return 1
-		return self.rows[self.current_row].can_hold (item)
-	def __str__ (self):
-		s = ''
-		for row in self.rows:
-			s = s + str (row)
-		return s + FF
+        def __init__ (self, formatter):
+                self.rows = []
+                self.current_row = 0
+                self.formatter = formatter
+                return
+        def add (self, item):
+                if len (self.rows) < self.formatter.num_lines:
+                        self.rows.append (Row (self.formatter))
+                        self.rows[-1].add (item)
+                else:
+                        self.rows [self.current_row].add (item)
+                        self.current_row = (self.current_row + 1) % \
+                                self.formatter.num_lines
+                return
+        def can_hold (self, item):
+                if len (self.rows) < self.formatter.num_lines:
+                        return 1
+                return self.rows[self.current_row].can_hold (item)
+        def __str__ (self):
+                s = ''
+                for row in self.rows:
+                        s = s + str (row)
+                return s + FF
 class Row:
-	def __init__ (self, formatter):
-		self.words = []
-		self.formatter = formatter
-		return
-	def can_hold (self, item):
-		return (len(self.words) < self.formatter.num_cols)
-	def add (self, item):
-		self.words.append(item)
-		return
-	def __str__ (self):
-		s = ''
-		for item in self.words:
-			s = s + string.ljust (item, self.formatter.col_size)
-		return s + LF
+        def __init__ (self, formatter):
+                self.words = []
+                self.formatter = formatter
+                return
+        def can_hold (self, item):
+                return (len(self.words) < self.formatter.num_cols)
+        def add (self, item):
+                self.words.append(item)
+                return
+        def __str__ (self):
+                s = ''
+                for item in self.words:
+                        s = s + string.ljust (item, self.formatter.col_size)
+                return s + LF
 
 def get_items (fp):
-	lines = []
-	line = fp.readline()
-	while line:
-		lines.append (string.strip (line))
-		line = fp.readline()
-	return lines
+        lines = []
+        line = fp.readline()
+        while line:
+                lines.append (string.strip (line))
+                line = fp.readline()
+        return lines
 
 def process_options ():
-	global NUM_COLS, NUM_LINES, FILE
+        global NUM_COLS, NUM_LINES, FILE
 
-	try:
-		(optlist, args) = getopt.getopt (sys.argv[1:], "C:L:")
-	except:
-		print USAGE
-		sys.exit(-1)
-	for (arg, value) in optlist:
-		if arg == '-C':
-			NUM_COLS = string.atoi (value)
-		elif arg == '-L':
-			NUM_LINES = string.atoi (value)
-	if len(args) > 0:
-		FILE = open (args[0], 'r')
-	return
+        try:
+                (optlist, args) = getopt.getopt (sys.argv[1:], "C:L:")
+        except:
+                print(USAGE)
+                sys.exit(-1)
+        for (arg, value) in optlist:
+                if arg == '-C':
+                        NUM_COLS = string.atoi (value)
+                elif arg == '-L':
+                        NUM_LINES = string.atoi (value)
+        if len(args) > 0:
+                FILE = open (args[0], 'r')
+        return
 
 def main ():
-	process_options()
-	items = get_items (FILE)
-	if FILE != sys.stdin:
-		FILE.close()
-	formatter = Formatter (items, NUM_LINES, NUM_COLS)
-	formatter.build()
-	if not formatter.check ():
-		print "Cannot use that many columns."
-	else:
-		print str(formatter)
+        process_options()
+        items = get_items (FILE)
+        if FILE != sys.stdin:
+                FILE.close()
+        formatter = Formatter (items, NUM_LINES, NUM_COLS)
+        formatter.build()
+        if not formatter.check ():
+                print("Cannot use that many columns.")
+        else:
+                print(str(formatter))
 
 if __name__ == '__main__':
-	main()
+        main()

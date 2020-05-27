@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # analyzes Java code to determine imports, potential classes used, and
 # commenting percentages
@@ -12,8 +12,8 @@ import regsub
 import getopt
 
 USAGE = '''Usage:  %s [-v] <filename>...
-	-v : verbose mode (show imports and a list of strings which could be
-			class names used)
+        -v : verbose mode (show imports and a list of strings which could be
+                        class names used)
 ''' % os.path.basename(sys.argv[0])
 
 IMPORT_RE = regex.compile ('^import \([^\n;]+\)');
@@ -21,124 +21,124 @@ VERBOSE = 0
 LINE_COUNT = 0
 
 def handleComment (line, pos1, fp):
-	global LINE_COUNT
+        global LINE_COUNT
 
-	newLine = line[:pos1]
-	line = line[pos1:]
-	comment = ''
+        newLine = line[:pos1]
+        line = line[pos1:]
+        comment = ''
 
-	pos2 = string.find (line, '*/')
-	while line and (pos2 == -1):
-		comment = comment + line
-		line = fp.readline()
-		pos2 = string.find (line, '*/')
-		LINE_COUNT = LINE_COUNT + 1
+        pos2 = string.find (line, '*/')
+        while line and (pos2 == -1):
+                comment = comment + line
+                line = fp.readline()
+                pos2 = string.find (line, '*/')
+                LINE_COUNT = LINE_COUNT + 1
 
-	comment = comment + line[:pos2 + 2]
-	newLine = newLine + line[pos2 + 2:]
-	return newLine, comment
+        comment = comment + line[:pos2 + 2]
+        newLine = newLine + line[pos2 + 2:]
+        return newLine, comment
 
 def cutStrings (s):
-	pos1 = string.find (s, '"')
-	if pos1 == -1:
-		return s
-	pos2 = string.find (s, '"', pos1 + 1)
-	if pos2 == -1:
-		return s
-	return cutStrings (s[:pos1] + s[pos2 + 1:])
-	
+        pos1 = string.find (s, '"')
+        if pos1 == -1:
+                return s
+        pos2 = string.find (s, '"', pos1 + 1)
+        if pos2 == -1:
+                return s
+        return cutStrings (s[:pos1] + s[pos2 + 1:])
+        
 def processFile (filename):
-	global LINE_COUNT
+        global LINE_COUNT
 
-	fp = open (filename, 'r')
-	line = fp.readline()
-	imports = []
-	classes = {}
-	codeChars = 0
-	commentChars = 0
-	LINE_COUNT = 0
+        fp = open (filename, 'r')
+        line = fp.readline()
+        imports = []
+        classes = {}
+        codeChars = 0
+        commentChars = 0
+        LINE_COUNT = 0
 
-	while line:
-		LINE_COUNT = LINE_COUNT + 1
+        while line:
+                LINE_COUNT = LINE_COUNT + 1
 
-		if IMPORT_RE.match (line) != -1:
-			imports.append (IMPORT_RE.group(1))
+                if IMPORT_RE.match (line) != -1:
+                        imports.append (IMPORT_RE.group(1))
 
-		pos = string.find (line, '//')
-		if pos != -1:
-			commentChars = commentChars + len(line) - pos
-			line = line[:pos]
+                pos = string.find (line, '//')
+                if pos != -1:
+                        commentChars = commentChars + len(line) - pos
+                        line = line[:pos]
 
-		pos1 = string.find (line, '/*')
-		if pos1 != -1:
-			line, comment = handleComment (line, pos1, fp)
-			commentChars = commentChars + len(comment)
+                pos1 = string.find (line, '/*')
+                if pos1 != -1:
+                        line, comment = handleComment (line, pos1, fp)
+                        commentChars = commentChars + len(comment)
 
-		codeChars = codeChars + len(line)
+                codeChars = codeChars + len(line)
 
-		words = string.split (
-				regsub.gsub ('[][.=,;{}()]', ' ',
-					cutStrings(line)))
-		for word in words:
-			if (word[0] >= 'A') and (word[0] <= 'Z'):
-				classes[word] = 1
-		line = fp.readline()
+                words = string.split (
+                                regsub.gsub ('[][.=,;{}()]', ' ',
+                                        cutStrings(line)))
+                for word in words:
+                        if (word[0] >= 'A') and (word[0] <= 'Z'):
+                                classes[word] = 1
+                line = fp.readline()
 
-	fp.close()
-	classes = classes.keys()
-	classes.sort()
-	imports.sort()
+        fp.close()
+        classes = list(classes.keys())
+        classes.sort()
+        imports.sort()
 
-	title = '%s (%d lines)' % (filename, LINE_COUNT)
-	print '=' * len(title)
-	print title
-	print '=' * len(title)
+        title = '%s (%d lines)' % (filename, LINE_COUNT)
+        print('=' * len(title))
+        print(title)
+        print('=' * len(title))
 
-	if VERBOSE:
-		print 'Imports:'
-		print '--------'
-		for imprt in imports:
-			print imprt
-		print
+        if VERBOSE:
+                print('Imports:')
+                print('--------')
+                for imprt in imports:
+                        print(imprt)
+                print()
 
-		print 'Likely Classes:'
-		print '---------------'
-		for clas in classes:
-			print clas
-		print
+                print('Likely Classes:')
+                print('---------------')
+                for clas in classes:
+                        print(clas)
+                print()
 
-	totalChars = codeChars + commentChars
+        totalChars = codeChars + commentChars
 
-	print '          Characters'
-	print '          ----------'
-	print 'Code      %6d (%3.1f%%)' % (codeChars,
-					codeChars * 100.0 / totalChars)
-	print 'Comments  %6d (%3.1f%%)' % (commentChars,
-					commentChars * 100.0 / totalChars)
-	print 'Total     %6d' % totalChars
-	print
-	return
+        print('          Characters')
+        print('          ----------')
+        print('Code      %6d (%3.1f%%)' % (codeChars,
+                                        codeChars * 100.0 / totalChars))
+        print('Comments  %6d (%3.1f%%)' % (commentChars,
+                                        commentChars * 100.0 / totalChars))
+        print('Total     %6d' % totalChars)
+        print()
+        return
 
 def main():
-	global VERBOSE
+        global VERBOSE
 
-	try:
-		options, args = getopt.getopt (sys.argv[1:], 'v')
-	except getopt.error:
-		print USAGE
-		sys.exit(0)
+        try:
+                options, args = getopt.getopt (sys.argv[1:], 'v')
+        except getopt.error:
+                print(USAGE)
+                sys.exit(0)
 
-	for (opt, val) in options:
-		if opt == '-v':
-			VERBOSE = 1
+        for (opt, val) in options:
+                if opt == '-v':
+                        VERBOSE = 1
 
-	filenames = []
-	for arg in args:
-		filenames = filenames + glob.glob(arg)
+        filenames = []
+        for arg in args:
+                filenames = filenames + glob.glob(arg)
 
-	for filename in filenames:
-		processFile (filename)
-	return
+        for filename in filenames:
+                processFile (filename)
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

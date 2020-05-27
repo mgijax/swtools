@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # accepts as input a filename containing SQL commands, possibly dumped from
 # the WI's wi_db.py library using the 'debug_file' facility
@@ -13,264 +13,264 @@ import time
 import db
 
 USAGE = '''Usage: %s [-S <db server>][-D <database>][-n <reps>] [<filename>]
-	-S <db server> : specifies the name of the database server to use
-	-D <database>  : specifies the name of the database within <db server>
-	-n <reps>      : number of repetitions of query set (default is 1)
-	<filename>     : path to file containing SQL commands
+        -S <db server> : specifies the name of the database server to use
+        -D <database>  : specifies the name of the database within <db server>
+        -n <reps>      : number of repetitions of query set (default is 1)
+        <filename>     : path to file containing SQL commands
 
-	If -S and -D are not used, the environment variables DSQUERY and
-	DATABASE are used instead.  The 'mgd_public' login is used to issue
-	the SQL commands.
+        If -S and -D are not used, the environment variables DSQUERY and
+        DATABASE are used instead.  The 'mgd_public' login is used to issue
+        the SQL commands.
 
-	If no filename is specified, input is read from stdin.  This will
-	give you the ability to, for example, have a file of SQL with certain
-	parameters that you want to fill in by piping the file through sed
-	and then piping sed's output into %s.
+        If no filename is specified, input is read from stdin.  This will
+        give you the ability to, for example, have a file of SQL with certain
+        parameters that you want to fill in by piping the file through sed
+        and then piping sed's output into %s.
 
-	In your input file, blank lines are assumed to be dividers between
-	SQL statements.  The 'go' command is also treated as a divider 
-	between SQL statements.  (All statements are issued individually,
-	rather than as part of a batch.  All do use a single connection, so
-	a temp table created in one statement will be available in later
-	ones.)
+        In your input file, blank lines are assumed to be dividers between
+        SQL statements.  The 'go' command is also treated as a divider 
+        between SQL statements.  (All statements are issued individually,
+        rather than as part of a batch.  All do use a single connection, so
+        a temp table created in one statement will be available in later
+        ones.)
 
-	The given <filename> may either be all SQL or may be in the format
-	created by the python WI's debug_file format.  (see wi_db.py to
-	create a debug_file)
+        The given <filename> may either be all SQL or may be in the format
+        created by the python WI's debug_file format.  (see wi_db.py to
+        create a debug_file)
 ''' % (sys.argv[0], sys.argv[0])
 
 ###--- globals ---###
 
-timings = []		# [ [timings for cmd 1], [for cmd 2], ... ]
-rowCounts = []		# [ counts cmd 1, for cmd 2, ... ]
-reps = 1		# number of repetitions
+timings = []            # [ [timings for cmd 1], [for cmd 2], ... ]
+rowCounts = []          # [ counts cmd 1, for cmd 2, ... ]
+reps = 1                # number of repetitions
 
 ###--- functions ---###
 
 def bailout (s):
-	print USAGE
-	print
-	if s:
-		print 'Error: %s' % s
-	sys.exit(1)
+        print(USAGE)
+        print()
+        if s:
+                print('Error: %s' % s)
+        sys.exit(1)
 
 def processCommandLine():
-	global reps
+        global reps
 
-	try:
-		optlist, args = getopt.getopt (sys.argv[1:], 'D:S:n:')
-	except getopt.GetoptError, message:
-		bailout (message)
+        try:
+                optlist, args = getopt.getopt (sys.argv[1:], 'D:S:n:')
+        except getopt.GetoptError as message:
+                bailout (message)
 
-	if len(args) == 1:
-		filename = args[0]
-	elif len(args) > 1:
-		bailout ('too many filenames')
-	else:
-		filename = None
+        if len(args) == 1:
+                filename = args[0]
+        elif len(args) > 1:
+                bailout ('too many filenames')
+        else:
+                filename = None
 
-	dsquery = None
-	database = None
+        dsquery = None
+        database = None
 
-	if os.environ.has_key('DSQUERY'):
-		dsquery = os.environ['DSQUERY']
-	if os.environ.has_key('DATABASE'):
-		database = os.environ['DATABASE']
+        if 'DSQUERY' in os.environ:
+                dsquery = os.environ['DSQUERY']
+        if 'DATABASE' in os.environ:
+                database = os.environ['DATABASE']
 
-	for (flag, value) in optlist:
-		if flag == '-D':
-			database = value
-		elif flag == '-n':
-			try:
-				reps = int(value)
-			except:
-				bailout ('Invalid value for -n: %s' % value)
-		elif flag == '-S':
-			dsquery = value
+        for (flag, value) in optlist:
+                if flag == '-D':
+                        database = value
+                elif flag == '-n':
+                        try:
+                                reps = int(value)
+                        except:
+                                bailout ('Invalid value for -n: %s' % value)
+                elif flag == '-S':
+                        dsquery = value
 
-	if dsquery == None:
-		bailout ('No database server.  Use -S or set DSQUERY in '
-			'your environment')
-	if database == None:
-		bailout ('No database.  Use -D or set DATABASE in '
-			'your environment')
+        if dsquery == None:
+                bailout ('No database server.  Use -S or set DSQUERY in '
+                        'your environment')
+        if database == None:
+                bailout ('No database.  Use -D or set DATABASE in '
+                        'your environment')
 
-	try:
-		db.set_sqlLogin ('mgd_public', 'mgdpub', dsquery, database)
-		db.useOneConnection(1)
-	except:
-		bailout ('mgd_public database login failed for %s..%s' % \
-			(dsquery, database))
+        try:
+                db.set_sqlLogin ('mgd_public', 'mgdpub', dsquery, database)
+                db.useOneConnection(1)
+        except:
+                bailout ('mgd_public database login failed for %s..%s' % \
+                        (dsquery, database))
 
-	return filename
-	
+        return filename
+        
 
 def readfile(filename):
-	if filename != None:
-		if not os.path.exists (filename):
-			bailout ('cannot find file %s' % filename)
-		if os.path.isdir (filename):
-			bailout ('%s is a directory' % filename)
-	try:
-		if filename != None:
-			fp = open(filename, 'r')
-		else:
-			fp = sys.stdin
+        if filename != None:
+                if not os.path.exists (filename):
+                        bailout ('cannot find file %s' % filename)
+                if os.path.isdir (filename):
+                        bailout ('%s is a directory' % filename)
+        try:
+                if filename != None:
+                        fp = open(filename, 'r')
+                else:
+                        fp = sys.stdin
 
-		lines = map(string.rstrip, fp.readlines())
+                lines = list(map(string.rstrip, fp.readlines()))
 
-		if filename != None:
-			fp.close()
-	except:
-		if filename != None:
-			bailout ('failed to read %s' % filename)
-		else:
-			bailout ('failed to read from stdin')
+                if filename != None:
+                        fp.close()
+        except:
+                if filename != None:
+                        bailout ('failed to read %s' % filename)
+                else:
+                        bailout ('failed to read from stdin')
 
-	return lines
+        return lines
 
 def findDigits (line):
-	digits = ''
-	for c in line:
-		if '0' <= c <= '9':
-			digits = digits + c
-	return digits
+        digits = ''
+        for c in line:
+                if '0' <= c <= '9':
+                        digits = digits + c
+        return digits
 
 def splitLines (lines):
-	cmds = []
+        cmds = []
 
-	cmd = []
-	rowCount = None
-	addCmd = False
+        cmd = []
+        rowCount = None
+        addCmd = False
 
-	for line in lines:
-		if line == 'go':
-			addCmd = True
+        for line in lines:
+                if line == 'go':
+                        addCmd = True
 
-		elif line == '':
-			addCmd = True
+                elif line == '':
+                        addCmd = True
 
-		elif line[:11] == 'row counts:':
-			addCmd = True
-			rowCount = 'SET ROWCOUNT %s' % findDigits (line)
+                elif line[:11] == 'row counts:':
+                        addCmd = True
+                        rowCount = 'SET ROWCOUNT %s' % findDigits (line)
 
-		else:
-			cmd.append (line)
+                else:
+                        cmd.append (line)
 
-		if addCmd:
-			if cmd:
-				cmds.append ('\n'.join (cmd))
-			if rowCount:
-				cmds.append (rowCount)
+                if addCmd:
+                        if cmd:
+                                cmds.append ('\n'.join (cmd))
+                        if rowCount:
+                                cmds.append (rowCount)
 
-			addCmd = False
-			cmd = []
-			rowCount = None
+                        addCmd = False
+                        cmd = []
+                        rowCount = None
 
-	if cmd:
-		cmds.append ('\n'.join (cmd))
+        if cmd:
+                cmds.append ('\n'.join (cmd))
 
-	return cmds
+        return cmds
 
 def runCommand (cmd):
-	startTime = time.time() 
-	results = db.sql (cmd, 'auto')
-	stopTime = time.time()
+        startTime = time.time() 
+        results = db.sql (cmd, 'auto')
+        stopTime = time.time()
 
-	if results:
-		rowCount = len(results)
-	else:
-		rowCount = 0
+        if results:
+                rowCount = len(results)
+        else:
+                rowCount = 0
 
-	return stopTime - startTime, rowCount
+        return stopTime - startTime, rowCount
 
 def runCommands (commands):
-	global timings, rowCounts
+        global timings, rowCounts
 
-	i = 0
-	for cmd in commands:
-		timing, rowCount = runCommand (cmd)
+        i = 0
+        for cmd in commands:
+                timing, rowCount = runCommand (cmd)
 
-		if len(timings) > i:
-			timings[i].append (timing)
-		else:
-			timings.append ( [timing] )
-			rowCounts.append (rowCount)
-		i = i + 1
-	return
+                if len(timings) > i:
+                        timings[i].append (timing)
+                else:
+                        timings.append ( [timing] )
+                        rowCounts.append (rowCount)
+                i = i + 1
+        return
 
 def average (myList):
-	return 1.0 * sum(myList) / len(myList)
+        return 1.0 * sum(myList) / len(myList)
 
 def printTable ():
-	global timings
+        global timings
 
-	averages = map (average, timings)
-	mins = map (min, timings)
-	maxes = map (max, timings)
+        averages = list(map (average, timings))
+        mins = list(map (min, timings))
+        maxes = list(map (max, timings))
 
-	timings = averages
+        timings = averages
 
-	if timings:
-		totalTime = sum(timings)
-		maxTime = max(timings)
-	else:
-		totalTime = 0.0
-		maxTime = 0.0
+        if timings:
+                totalTime = sum(timings)
+                maxTime = max(timings)
+        else:
+                totalTime = 0.0
+                maxTime = 0.0
 
-	perStar = maxTime / 40
+        perStar = maxTime / 40
 
-	if reps > 1:
-		print 'Averaged for %d runs:' % reps
-		print
+        if reps > 1:
+                print('Averaged for %d runs:' % reps)
+                print()
 
-	print 'cmd rows returned  elapsed (s)   time histogram (%1.2f per *)'\
-		% perStar
-	print '--- ------------- -------------- ----------------------------'
+        print('cmd rows returned  elapsed (s)   time histogram (%1.2f per *)'\
+                % perStar)
+        print('--- ------------- -------------- ----------------------------')
 
-	template = '%3d %13d %7.2f %5.1f%% %s'
+        template = '%3d %13d %7.2f %5.1f%% %s'
 
-	i = 0
-	for elapsed in timings:
-		rowCount = rowCounts[i]
+        i = 0
+        for elapsed in timings:
+                rowCount = rowCounts[i]
 
-		if totalTime > 0.0:
-			pct = elapsed * 100.0 / totalTime
-		else:
-			pct = 0.0
-		
-		if (elapsed > 0.0) and (perStar > 0.0):
-			starCount = int(elapsed / perStar)
-			histogram = '*' * starCount
-		else:
-			histogram = ''
-			
-		print template % (i, rowCount, elapsed, pct, histogram)
-		i = i + 1
-	print
-	print 'total time (s):   %7.2f' % totalTime
+                if totalTime > 0.0:
+                        pct = elapsed * 100.0 / totalTime
+                else:
+                        pct = 0.0
+                
+                if (elapsed > 0.0) and (perStar > 0.0):
+                        starCount = int(elapsed / perStar)
+                        histogram = '*' * starCount
+                else:
+                        histogram = ''
+                        
+                print(template % (i, rowCount, elapsed, pct, histogram))
+                i = i + 1
+        print()
+        print('total time (s):   %7.2f' % totalTime)
 
-	if reps > 1:
-		print
-		print 'cmd min (s) max (s) avg (s)'
-		print '--- ------- ------- -------'
+        if reps > 1:
+                print()
+                print('cmd min (s) max (s) avg (s)')
+                print('--- ------- ------- -------')
 
-		template = '%3d %7.2f %7.2f %7.2f'
+                template = '%3d %7.2f %7.2f %7.2f'
 
-		i = 0
-		while i < len(timings):
-			print template % (i, mins[i], maxes[i], timings[i])
-			i = i + 1
-	return
+                i = 0
+                while i < len(timings):
+                        print(template % (i, mins[i], maxes[i], timings[i]))
+                        i = i + 1
+        return
 
 def printCommands (commands):
-	i = 0
-	for cmd in commands:
-		print '--- command %d %s' % (i, '-' * 50)
-		print cmd
-		print
-		i = i + 1
-	return
+        i = 0
+        for cmd in commands:
+                print('--- command %d %s' % (i, '-' * 50))
+                print(cmd)
+                print()
+                i = i + 1
+        return
 
 ###--- main ---###
 
@@ -279,12 +279,12 @@ lines = readfile (filename)
 commands = splitLines (lines)
 
 try:
-	for i in range(0,reps):
-		runCommands (commands)
+        for i in range(0,reps):
+                runCommands (commands)
 except:
-	print '*** Error: run failed on command %d ***' % len(timings)
-	print
+        print('*** Error: run failed on command %d ***' % len(timings))
+        print()
 
 printTable()
-print
+print()
 printCommands(commands)

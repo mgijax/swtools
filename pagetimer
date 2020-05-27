@@ -1,49 +1,49 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 if '/usr/local/mgi/lib/python' not in sys.path:
-	sys.path.insert (0, '/usr/local/mgi/lib/python')
+        sys.path.insert (0, '/usr/local/mgi/lib/python')
 
 import time
 import httpReader
 import string
 
 def getPage (url, timeout = 60 * 8):
-	lines, errors = httpReader.getURL (url, timeout = timeout)
-	return lines, errors
+        lines, errors = httpReader.getURL (url, timeout = timeout)
+        return lines, errors
 
 def average (list):
-	sum = 0
-	for item in list:
-		sum = sum + item
-	return sum / len(list)
+        sum = 0
+        for item in list:
+                sum = sum + item
+        return sum / len(list)
 
 def main (count = 10):
-	url = sys.argv[1]
+        url = sys.argv[1]
 
-	times = []
-	failures = 0
-	i = 0
-	while i < count:
-		start = time.time()
-		lines, errors = getPage (url)
-		stop = time.time()
+        times = []
+        failures = 0
+        i = 0
+        while i < count:
+                start = time.time()
+                lines, errors = getPage (url)
+                stop = time.time()
 
-		if errors:
-			failures = failures + 1
-		else:
-			times.append (stop - start)
+                if errors:
+                        failures = failures + 1
+                else:
+                        times.append (stop - start)
 
-		i = i + 1
+                i = i + 1
 
-	times.sort()
-	print 'URL: %s' % url
-	print 'Failure Count: %3d' % failures
-	print 'Average Time:  %7.3f' % average(times)
-	for tym in times:
-		print '    %7.3f' % tym
-	print
-	return
+        times.sort()
+        print('URL: %s' % url)
+        print('Failure Count: %3d' % failures)
+        print('Average Time:  %7.3f' % average(times))
+        for tym in times:
+                print('    %7.3f' % tym)
+        print()
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

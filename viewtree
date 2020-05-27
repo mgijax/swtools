@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # see usage() below
 
@@ -15,116 +15,116 @@ VIEWS = {}
 TABLES = {}
 
 def usage():
-	print '''Usage: %s <view name> [<view name>...]
-	Shows a hierarchy of which tables and other views the given view
-	depends upon.  That is, if the specified view depends on another
-	view, then the dependencies of that view are also elaborated.  And
-	so on.  More than one view name may be specified if you would like
-	to analyze more than one.
+        print('''Usage: %s <view name> [<view name>...]
+        Shows a hierarchy of which tables and other views the given view
+        depends upon.  That is, if the specified view depends on another
+        view, then the dependencies of that view are also elaborated.  And
+        so on.  More than one view name may be specified if you would like
+        to analyze more than one.
 
-	By default, this examines views in the /usr/local/mgi/live/ directory.
+        By default, this examines views in the /usr/local/mgi/live/ directory.
 
-	You may also specify each <view name> as...
-	  1. a path to a view creation script, which would resolve all
-	     dependencies relative to the directory of the specified script.
-	  2. a directory which contains view creation scripts, which would
-	     process all view creation scripts in that directory
-	  3. a path containing wildcards to identify certain view creation
-	     scripts you would like processed
+        You may also specify each <view name> as...
+          1. a path to a view creation script, which would resolve all
+             dependencies relative to the directory of the specified script.
+          2. a directory which contains view creation scripts, which would
+             process all view creation scripts in that directory
+          3. a path containing wildcards to identify certain view creation
+             scripts you would like processed
 
-	All views should be from the same directory; results are unreliable
-	if multiple views are specified and are from different directories.
-''' % sys.argv[0]
-	sys.exit(-1)
+        All views should be from the same directory; results are unreliable
+        if multiple views are specified and are from different directories.
+''' % sys.argv[0])
+        sys.exit(-1)
 
 def getDependencies (view):
-	global VIEWS, TABLES
+        global VIEWS, TABLES
 
-	if VIEWS.has_key(view):
-		return VIEWS[view]
-	if TABLES.has_key(view):
-		return TABLES[view]
+        if view in VIEWS:
+                return VIEWS[view]
+        if view in TABLES:
+                return TABLES[view]
 
-	filename = os.path.join (VIEWDIR, view + '_create.object')
-	if not os.path.exists (filename):
-		TABLES[view] = [ view ]
-		return TABLES[view]
-		
-	fp = open(filename, 'r')
-	lines = fp.readlines()
-	fp.close()
+        filename = os.path.join (VIEWDIR, view + '_create.object')
+        if not os.path.exists (filename):
+                TABLES[view] = [ view ]
+                return TABLES[view]
+                
+        fp = open(filename, 'r')
+        lines = fp.readlines()
+        fp.close()
 
-	lines = map(string.strip, lines)
-	viewDef = ' '.join(lines)
+        lines = list(map(string.strip, lines))
+        viewDef = ' '.join(lines)
 
-	pos = viewDef.lower().find ('create view')
-	if pos < 0:
-		return [view]
+        pos = viewDef.lower().find ('create view')
+        if pos < 0:
+                return [view]
 
-	pos = viewDef.lower().find(' from ')
-	if pos < 0:
-		return [view]
+        pos = viewDef.lower().find(' from ')
+        if pos < 0:
+                return [view]
 
-	start = pos + 6
-	end = viewDef.lower().find(' where ', start)
-	if end < 0:
-		end = viewDef.lower().find(' go ', start)
-		if end < 0:
-			end = len(viewDef) + 1
+        start = pos + 6
+        end = viewDef.lower().find(' where ', start)
+        if end < 0:
+                end = viewDef.lower().find(' go ', start)
+                if end < 0:
+                        end = len(viewDef) + 1
 
-	tables = viewDef[start:end].split(',')
-	tables = map(string.strip, tables)
-	i = 0
-	while i < len(tables):
-		items = tables[i].split(' ')
-		tables[i] = items[0]
-		i = i + 1
+        tables = viewDef[start:end].split(',')
+        tables = list(map(string.strip, tables))
+        i = 0
+        while i < len(tables):
+                items = tables[i].split(' ')
+                tables[i] = items[0]
+                i = i + 1
 
-	VIEWS[view] = tables
-	return tables
+        VIEWS[view] = tables
+        return tables
 
 def trace (view, lvl):
-	dependencies = getDependencies(view)
-	for dependency in dependencies:
-		if dependency != view:
-			print SP * lvl + dependency
-			trace (dependency, lvl + 1)
-	return
+        dependencies = getDependencies(view)
+        for dependency in dependencies:
+                if dependency != view:
+                        print(SP * lvl + dependency)
+                        trace (dependency, lvl + 1)
+        return
 
 if __name__ == '__main__':
-	if len(sys.argv) < 2:
-		usage()
-	input = sys.argv[1:]
-	views = []
-	for view in input:
-		if os.path.isdir(view):
-			view = os.path.join (view, '*_create.object')
-			views = views + glob.glob(view)
-#			views = views + map(lambda x : os.path.join(view,x),
-#				os.listdir(view))
-		else:
-			temp = glob.glob(view)
-			if temp:
-				views = views + temp
-			else:
-				views.append(view)
-			
-	i = 0
-	while i < len(views):
-		view = views[i]
-		if os.sep in view:
-			VIEWDIR = os.path.dirname(view)
-			view = os.path.basename(view)
+        if len(sys.argv) < 2:
+                usage()
+        input = sys.argv[1:]
+        views = []
+        for view in input:
+                if os.path.isdir(view):
+                        view = os.path.join (view, '*_create.object')
+                        views = views + glob.glob(view)
+#                       views = views + map(lambda x : os.path.join(view,x),
+#                               os.listdir(view))
+                else:
+                        temp = glob.glob(view)
+                        if temp:
+                                views = views + temp
+                        else:
+                                views.append(view)
+                        
+        i = 0
+        while i < len(views):
+                view = views[i]
+                if os.sep in view:
+                        VIEWDIR = os.path.dirname(view)
+                        view = os.path.basename(view)
 
-		if view.endswith('_create.object'):
-			view = view[:view.find('_create.object')]
-		if view.endswith('_drop.object') or \
-			view.endswith('.logical') or \
-			(view == 'CVS') or (view == 'logs'):
-				i = i + 1
-				continue
-		print view
-		trace (view, 1)
-		i = i + 1
-		if i < len(views):
-			print '-' * 50
+                if view.endswith('_create.object'):
+                        view = view[:view.find('_create.object')]
+                if view.endswith('_drop.object') or \
+                        view.endswith('.logical') or \
+                        (view == 'CVS') or (view == 'logs'):
+                                i = i + 1
+                                continue
+                print(view)
+                trace (view, 1)
+                i = i + 1
+                if i < len(views):
+                        print('-' * 50)

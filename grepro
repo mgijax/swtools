@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import os
 import sys
@@ -6,71 +6,71 @@ import string
 import getopt
 
 USAGE = '''USAGE: %s [flags for grep] "<expression>" [<product alias>...]
-	Searches MGI's read-only source directories, exported periodically
-	from CVS.
+        Searches MGI's read-only source directories, exported periodically
+        from CVS.
     Notes:
-	The flags should be those appropriate for /usr/bin/grep: -bchilnsvw
-	The expression is a limited regular expression to find, as with grep.
-	You may specify zero or more CVS product aliases in which to run
-		a recursive grep.  If zero, then the full read-only source
-		hierarchy is searched.  If more than one, separate them with
-		spaces.
+        The flags should be those appropriate for /usr/bin/grep: -bchilnsvw
+        The expression is a limited regular expression to find, as with grep.
+        You may specify zero or more CVS product aliases in which to run
+                a recursive grep.  If zero, then the full read-only source
+                hierarchy is searched.  If more than one, separate them with
+                spaces.
 ''' % sys.argv[0]
 
 ###--- Globals ---###
 
-RO_PATH = '/mgi/software/readonlysrc/'		# path to read-only source dir
-flags = ''					# string of command-line flags
-expression = ''					# expression to seek
-products = []					# list of strings
+RO_PATH = '/mgi/software/readonlysrc/'          # path to read-only source dir
+flags = ''                                      # string of command-line flags
+expression = ''                                 # expression to seek
+products = []                                   # list of strings
 
 ###--- Functions ---###
 
 def bailout (s = None):
-	if s:
-		print s
-		print
-	print USAGE
-	sys.exit(-1)
+        if s:
+                print(s)
+                print()
+        print(USAGE)
+        sys.exit(-1)
 
 def handleParameters():
-	global flags, expression, products
+        global flags, expression, products
 
-	try:
-		options, args = getopt.getopt (sys.argv[1:], 'bchilnsvw')
-	except getopt.error:
-		bailout ('Problem with command-line options.')
+        try:
+                options, args = getopt.getopt (sys.argv[1:], 'bchilnsvw')
+        except getopt.error:
+                bailout ('Problem with command-line options.')
 
-	if options:
-		flags = string.join (map (lambda x: x[0], options), ' ')
+        if options:
+                flags = string.join ([x[0] for x in options], ' ')
 
-	if not args:
-		bailout ('Missing expression to seek')
-	expression = args[0]
+        if not args:
+                bailout ('Missing expression to seek')
+        expression = args[0]
 
-	not_products = []
-	all_products = os.listdir (RO_PATH)
-	for product in args[1:]:
-		if product in all_products:
-			products.append (product)
-		else:
-			not_products.append (product)
+        not_products = []
+        all_products = os.listdir (RO_PATH)
+        for product in args[1:]:
+                if product in all_products:
+                        products.append (product)
+                else:
+                        not_products.append (product)
 
-	if not_products:
-		bailout ('Unknown product name(s): %s' % string.join (
-			not_products, ', '))
-	return
+        if not_products:
+                bailout ('Unknown product name(s): %s' % string.join (
+                        not_products, ', '))
+        return
 
 def main():
-	handleParameters()
-	call = """find %%s -type f -print | sed '/[.]fm$/d' | sed '/[.]jpg$/d' | sed '/[.]gif$/d' | xargs grep %s "%s" | sed 's,%s,,'""" % \
-						(flags, expression, RO_PATH)
-	if products:
-		for product in products:
-			os.system (call % os.path.join (RO_PATH, product))
-	else:
-		os.system (call % RO_PATH)
-	return
+        handleParameters()
+        call = """find %%s -type f -print | sed '/[.]fm$/d' | sed '/[.]jpg$/d' | sed '/[.]gif$/d' | xargs grep %s "%s" | sed 's,%s,,'""" % \
+                                                (flags, expression, RO_PATH)
+        if products:
+                for product in products:
+                        os.system (call % os.path.join (RO_PATH, product))
+        else:
+                os.system (call % RO_PATH)
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

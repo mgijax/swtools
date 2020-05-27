@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 sys.path.append ('/usr/local/mgi/live/lib/python/')
@@ -14,10 +14,10 @@ start = time.time()
 stop = time.time()
 
 if not err:
-	print 'retrieved gray data page'
-	print 'length: ', len(string.join(s,''))
+        print('retrieved gray data page')
+        print('length: ', len(string.join(s,'')))
 else:
-	print 'failed to retrieve gray data page'
-	print 'error: ', err
+        print('failed to retrieve gray data page')
+        print('error: ', err)
 
-print 'time: ', (stop - start), ' sec'
+print('time: ', (stop - start), ' sec')

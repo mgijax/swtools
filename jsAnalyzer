@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # examine a Javascript library to provide some measurements of comments and
 # blank lines
@@ -8,198 +8,198 @@ import glob
 import string
 
 USAGE = '''Usage: %s <Javascript filename> [<filename 2>...<filename n>]
-	Wildcards are permitted to specify multiple filenames.
+        Wildcards are permitted to specify multiple filenames.
 ''' % sys.argv[0]
 
 DEBUG = False
 
 def bailout(err, showUsage=1):
-	sys.stderr.write('Error: %s\n' % sys)
-	if showUsage:
-		sys.stderr.write(USAGE)
-	sys.exit(1)
+        sys.stderr.write('Error: %s\n' % sys)
+        if showUsage:
+                sys.stderr.write(USAGE)
+        sys.exit(1)
 
 def readFile(s):
-	try:
-		fp = open(s, 'r')
-		lines = fp.readlines()
-		fp.close()
-	except:
-		bailout('Cannot read file: %s' % s)
-	return lines
+        try:
+                fp = open(s, 'r')
+                lines = fp.readlines()
+                fp.close()
+        except:
+                bailout('Cannot read file: %s' % s)
+        return lines
 
 def debug(s):
-	if DEBUG:
-		print s
-	return
+        if DEBUG:
+                print(s)
+        return
 
 def processFile(s):
-	lines = readFile(s)
+        lines = readFile(s)
 
-	inComment = False
+        inComment = False
 
-	commentLines = 0
-	blankLines = 0
-	codeLines = 0
-	inlineComments = 0
+        commentLines = 0
+        blankLines = 0
+        codeLines = 0
+        inlineComments = 0
 
-	codeChars = 0
-	commentChars = 0
+        codeChars = 0
+        commentChars = 0
 
-	# omits leading and trailing whitespace on each line
+        # omits leading and trailing whitespace on each line
 
-	for line in map(string.strip, lines):
+        for line in map(string.strip, lines):
 
-		debug('LINE: %s' % line)
+                debug('LINE: %s' % line)
 
-		# if we are within a multi-line comment that began on a 
-		# previous line
+                # if we are within a multi-line comment that began on a 
+                # previous line
 
-		if inComment:
-			debug('  - in comment')
-			commentLines = commentLines + 1
+                if inComment:
+                        debug('  - in comment')
+                        commentLines = commentLines + 1
 
-			endComment = line.find('*/')
-			if endComment > -1:
-				inComment = False
-				debug('  - found comment end')
+                        endComment = line.find('*/')
+                        if endComment > -1:
+                                inComment = False
+                                debug('  - found comment end')
 
-				if len(line) > (endComment + 2):
-					codeChars = codeChars + \
-						(len(line) - endComment  - 2)
-					debug('  - found trailing code')
+                                if len(line) > (endComment + 2):
+                                        codeChars = codeChars + \
+                                                (len(line) - endComment  - 2)
+                                        debug('  - found trailing code')
 
-			commentChars = commentChars + endComment + 2
+                        commentChars = commentChars + endComment + 2
 
-		# or if we just have a blank line
+                # or if we just have a blank line
 
-		elif len(line) == 0:
-			blankLines = blankLines + 1
-			debug('  - is a blank line')
+                elif len(line) == 0:
+                        blankLines = blankLines + 1
+                        debug('  - is a blank line')
 
-		else:
-			# if we have a comment contained on this line...
+                else:
+                        # if we have a comment contained on this line...
 
-			commentStart = line.find('/*')
-			commentEnd = line.find('*/')
+                        commentStart = line.find('/*')
+                        commentEnd = line.find('*/')
 
-			if (commentStart > -1) and (commentEnd > -1):
-				debug('  - found /* and */')
-				commentChars = commentChars + commentEnd \
-					- commentStart + 2
+                        if (commentStart > -1) and (commentEnd > -1):
+                                debug('  - found /* and */')
+                                commentChars = commentChars + commentEnd \
+                                        - commentStart + 2
 
-				line = line[:commentStart] + \
-					line[(commentEnd + 2):]
+                                line = line[:commentStart] + \
+                                        line[(commentEnd + 2):]
 
-				if len(line.strip()) == 0:
-					debug('  - is all a comment')
-					commentLines = commentLines + 1
-					continue
-				else:
-					debug('  - is an inline comment')
-					inlineComments = inlineComments + 1
+                                if len(line.strip()) == 0:
+                                        debug('  - is all a comment')
+                                        commentLines = commentLines + 1
+                                        continue
+                                else:
+                                        debug('  - is an inline comment')
+                                        inlineComments = inlineComments + 1
 
-			# if we have a multi-line comment that begins on
-			# this line...
+                        # if we have a multi-line comment that begins on
+                        # this line...
 
-			commentStart = line.find('/*')
+                        commentStart = line.find('/*')
 
-			if (commentStart > -1):
-				debug('  - found a /*')
-				inComment = True
-				if (commentStart == 0):
-					debug('  - only begins a comment')
-					commentLines = commentLines + 1
-				else:
-					debug('  - has code at start')
-					codeLines = codeLines + 1
+                        if (commentStart > -1):
+                                debug('  - found a /*')
+                                inComment = True
+                                if (commentStart == 0):
+                                        debug('  - only begins a comment')
+                                        commentLines = commentLines + 1
+                                else:
+                                        debug('  - has code at start')
+                                        codeLines = codeLines + 1
 
-				commentChars = commentChars + len(line) \
-					- commentStart
-				codeChars = codeChars + commentStart
-				continue
+                                commentChars = commentChars + len(line) \
+                                        - commentStart
+                                codeChars = codeChars + commentStart
+                                continue
 
-			# if we have an inline comment on this line...
+                        # if we have an inline comment on this line...
 
-			inlineStart = line.find('//')
+                        inlineStart = line.find('//')
 
-			if (inlineStart > -1):
-				debug('  - found //')
-				codeChars = codeChars + inlineStart
-				commentChars = commentChars + len(line) \
-					- inlineStart
+                        if (inlineStart > -1):
+                                debug('  - found //')
+                                codeChars = codeChars + inlineStart
+                                commentChars = commentChars + len(line) \
+                                        - inlineStart
 
-				if inlineStart > 0:
-					debug('  - found code at start')
-					codeLines = codeLines + 1
-					inlineComments = inlineComments + 1
-				else:
-					debug('  - is only a comment')
-					commentLines = commentLines + 1
-				
-			# otherwise, this line is all code...
+                                if inlineStart > 0:
+                                        debug('  - found code at start')
+                                        codeLines = codeLines + 1
+                                        inlineComments = inlineComments + 1
+                                else:
+                                        debug('  - is only a comment')
+                                        commentLines = commentLines + 1
+                                
+                        # otherwise, this line is all code...
 
-			else:
-				debug('  - is all code')
-				codeLines = codeLines + 1
-				codeChars = codeChars + len(line)
+                        else:
+                                debug('  - is all code')
+                                codeLines = codeLines + 1
+                                codeChars = codeChars + len(line)
 
-	totalLines = codeLines + commentLines + blankLines
-	totalChars = codeChars + commentChars
+        totalLines = codeLines + commentLines + blankLines
+        totalChars = codeChars + commentChars
 
-	print 'Report for %s:' % s
-	print '  Total lines: %6d' % totalLines
+        print('Report for %s:' % s)
+        print('  Total lines: %6d' % totalLines)
 
-	toReport = [
-		('Code lines', codeLines),
-		('Comment lines', commentLines),
-		('Blank lines', blankLines),
-		('Inline comments', inlineComments),
-		]
+        toReport = [
+                ('Code lines', codeLines),
+                ('Comment lines', commentLines),
+                ('Blank lines', blankLines),
+                ('Inline comments', inlineComments),
+                ]
 
-	width = 2 + max(map(len, map(lambda x:x[0], toReport)))
+        width = 2 + max(list(map(len, [x[0] for x in toReport])))
 
-	for (label, ct) in toReport:
-		if totalLines > 0:
-			percent = 100.0 * ct / totalLines
-		else:
-			percent = 0.0
+        for (label, ct) in toReport:
+                if totalLines > 0:
+                        percent = 100.0 * ct / totalLines
+                else:
+                        percent = 0.0
 
-		print '    %s: %6d lines (%5.1f%%)' % (label.ljust(width),
-			ct, percent)
+                print('    %s: %6d lines (%5.1f%%)' % (label.ljust(width),
+                        ct, percent))
 
-	print '  Total characters: %8d' % totalChars
+        print('  Total characters: %8d' % totalChars)
 
-	toReport = [
-		('Code characters', codeChars),
-		('Comment characters', commentChars)
-		]
+        toReport = [
+                ('Code characters', codeChars),
+                ('Comment characters', commentChars)
+                ]
 
-	width = 2 + max(map(len, map(lambda x:x[0], toReport)))
+        width = 2 + max(list(map(len, [x[0] for x in toReport])))
 
-	for (label, ct) in toReport:
-		if totalChars > 0:
-			percent = 100.0 * ct / totalChars
-		else:
-			percent = 0.0
+        for (label, ct) in toReport:
+                if totalChars > 0:
+                        percent = 100.0 * ct / totalChars
+                else:
+                        percent = 0.0
 
-		print '    %s: %6d chars (%5.1f%%)' % (label.ljust(width),
-			ct, percent)
+                print('    %s: %6d chars (%5.1f%%)' % (label.ljust(width),
+                        ct, percent))
 
-	print '    (omits leading and trailing whitespace on each line)'
-	return
+        print('    (omits leading and trailing whitespace on each line)')
+        return
 
 ###--- main program ---###
 
 if __name__ == '__main__':
-	if len(sys.argv) < 2:
-		bailout('Too few arguments')
+        if len(sys.argv) < 2:
+                bailout('Too few arguments')
 
-	files = []
-	for item in sys.argv[1:]:
-		files = files + glob.glob(item)
+        files = []
+        for item in sys.argv[1:]:
+                files = files + glob.glob(item)
 
-	print '-' * 40
-	for filename in files:
-		processFile(filename)
-		print '-' * 40
+        print('-' * 40)
+        for filename in files:
+                processFile(filename)
+                print('-' * 40)

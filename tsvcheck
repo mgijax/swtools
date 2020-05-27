@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import regsub
@@ -6,49 +6,49 @@ import string
 import getopt
 
 USAGE = '''%s [-v <count>] <filename>
-	Using the -v option allows you to request the line numbers which have
-	a certain <count> number of fields.
+        Using the -v option allows you to request the line numbers which have
+        a certain <count> number of fields.
 ''' % sys.argv[0]
 
 try:
-	optlist, args = getopt.getopt (sys.argv[1:], 'v:')
+        optlist, args = getopt.getopt (sys.argv[1:], 'v:')
 except getopt.error:
-	print USAGE
-	sys.exit(1)
+        print(USAGE)
+        sys.exit(1)
 
 if len(args) != 1:
-	print USAGE
-	sys.exit(1)
+        print(USAGE)
+        sys.exit(1)
 
 target = None
 for (opt, value) in optlist:
-	if opt == '-v':
-		try:
-			target = string.atoi (value)
-		except:
-			print 'Could not parse "%s" as an int' % value
-			sys.exit(1)
+        if opt == '-v':
+                try:
+                        target = string.atoi (value)
+                except:
+                        print('Could not parse "%s" as an int' % value)
+                        sys.exit(1)
 
 fp = open (args[0])
 lineNum = 0
 counts = {}
 line = fp.readline()
 while line:
-	lineNum = lineNum + 1
-	count = len(regsub.split (line, '\t'))
-	if not counts.has_key (count):
-		counts[count] = []
-	counts[count].append (lineNum)
-	line = fp.readline()
+        lineNum = lineNum + 1
+        count = len(regsub.split (line, '\t'))
+        if count not in counts:
+                counts[count] = []
+        counts[count].append (lineNum)
+        line = fp.readline()
 fp.close()
 
-counted = counts.keys()
+counted = list(counts.keys())
 counted.sort()
 
 if target:
-	if counts.has_key (target):
-		for line in counts[target]:
-			print line
+        if target in counts:
+                for line in counts[target]:
+                        print(line)
 else:
-	for item in counted:
-		print '%d : %d' % (item, len(counts[item]))
+        for item in counted:
+                print('%d : %d' % (item, len(counts[item])))

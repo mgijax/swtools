@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import string
@@ -6,33 +6,33 @@ import os
 import time
 
 USAGE = '''Usage: %s <count to show> <directory>
-	Note - ignores symbolic links
+        Note - ignores symbolic links
 ''' % sys.argv[0]
 
 top = []
 ct = 0
 
 def visitDir (arg, dirname, contents):
-	global top
-	for file in contents:
-		file = os.path.join (dirname, file)
-		if os.path.islink (file):
-			continue
-		mod_time = os.stat (file)[8]
-		top.append ( (mod_time, file) )
-	top.sort()
-	top = top[-ct:]
-	return
+        global top
+        for file in contents:
+                file = os.path.join (dirname, file)
+                if os.path.islink (file):
+                        continue
+                mod_time = os.stat (file)[8]
+                top.append ( (mod_time, file) )
+        top.sort()
+        top = top[-ct:]
+        return
 
 if len(sys.argv) != 3:
-	print "Error: Wrong number of arguments"
-	print USAGE
-	sys.exit(1)
+        print("Error: Wrong number of arguments")
+        print(USAGE)
+        sys.exit(1)
 
 if not os.path.isdir(sys.argv[2]):
-	print "Error: %s is not a directory" % sys.argv[2]
-	print USAGE
-	sys.exit(1)
+        print("Error: %s is not a directory" % sys.argv[2])
+        print(USAGE)
+        sys.exit(1)
 
 ct = string.atoi(sys.argv[1])
 
@@ -40,4 +40,4 @@ os.path.walk (sys.argv[2], visitDir, None)
 
 top.reverse()
 for (mod_time, filename) in top:
-	print time.asctime (time.localtime (mod_time)), filename
+        print(time.asctime (time.localtime (mod_time)), filename)

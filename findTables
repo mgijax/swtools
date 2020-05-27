@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # finds tables and views which exist in SQL in files given on the command-line
 # or from filenames piped into stdin
@@ -7,7 +7,7 @@ import sys
 import re
 
 USAGE = '''USAGE: %s [<filename>...]
-	May pipe filenames into stdin rather than listing on cmd line.
+        May pipe filenames into stdin rather than listing on cmd line.
 ''' % sys.argv[0]
 
 ###--- Globals ---###
@@ -18,203 +18,203 @@ from_stdin = []
 ###--- Functions ---###
 
 def bailout(s = None):
-	if s:
-		print '-' * len(s)
-		print s
-		print '-' * len(s)
-	print USAGE
-	sys.exit(-1)
+        if s:
+                print('-' * len(s))
+                print(s)
+                print('-' * len(s))
+        print(USAGE)
+        sys.exit(-1)
 
 def handleParms ():
-	global files
+        global files
 
-	if len(sys.argv) > 1:
-		files = files + sys.argv[1:]
-	return
+        if len(sys.argv) > 1:
+                files = files + sys.argv[1:]
+        return
 
 def readStdin ():
-	global from_stdin
+        global from_stdin
 
-	line = sys.stdin.readline()
-	while line:
-		from_stdin.append (line.strip())
-		line = sys.stdin.readline()
-	return from_stdin
+        line = sys.stdin.readline()
+        while line:
+                from_stdin.append (line.strip())
+                line = sys.stdin.readline()
+        return from_stdin
 
 def readFile(filename):
-	try:
-		fp = open(filename, 'r')
-	except:
-		bailout('%s -- ERROR: Cannot open' % filename)
+        try:
+                fp = open(filename, 'r')
+        except:
+                bailout('%s -- ERROR: Cannot open' % filename)
 
-	lines = fp.readlines()
-	fp.close()
+        lines = fp.readlines()
+        fp.close()
 
-	return lines
+        return lines
 
 def stripComments(data):
-	# removes inline comments; does not address multi-line java comments
-	# delimited with /* ... */
+        # removes inline comments; does not address multi-line java comments
+        # delimited with /* ... */
 
-	i = 0
-	while (i < len(data)):
-		s = data[i]
+        i = 0
+        while (i < len(data)):
+                s = data[i]
 
-		for commentStart in [ '#', '//' ]:
-			if s.find(commentStart) >= 0:
-				s = s[:s.find(commentStart)]
+                for commentStart in [ '#', '//' ]:
+                        if s.find(commentStart) >= 0:
+                                s = s[:s.find(commentStart)]
 
-		# strip out logging info
-		s = re.sub('logger.info *\([^)]*\)', '', s)
-		s = re.sub('logger.error *\([^)]*\)', '', s)
-		s = re.sub('logger.debug *\([^)]*\)', '', s)
+                # strip out logging info
+                s = re.sub('logger.info *\([^)]*\)', '', s)
+                s = re.sub('logger.error *\([^)]*\)', '', s)
+                s = re.sub('logger.debug *\([^)]*\)', '', s)
 
-		data[i] = s 
-		i = i + 1
+                data[i] = s 
+                i = i + 1
 
-	return data
+        return data
 
 def joinLines(data):
-	# join any strings in data that are split across multiple lines;
-	# note that in Python, we can have strings across lines due to:
-	#	1. triple-quoted strings
-	#	2. implicit concatenation (no operator needed, just adjacency)
-	#	3. explicit concatenation (+ operator)
-	# also need to account for trailing backslashes and open parentheses
+        # join any strings in data that are split across multiple lines;
+        # note that in Python, we can have strings across lines due to:
+        #       1. triple-quoted strings
+        #       2. implicit concatenation (no operator needed, just adjacency)
+        #       3. explicit concatenation (+ operator)
+        # also need to account for trailing backslashes and open parentheses
 
-	# join into a single line, strip newlines, replace tabs with spaces
+        # join into a single line, strip newlines, replace tabs with spaces
 
-	joined = ' '.join(data).replace('\n','').replace('\t',' ').replace('\\r','').replace('\\n', '').replace('\r', '')
-	
-	# remove concatenation characters
+        joined = ' '.join(data).replace('\n','').replace('\t',' ').replace('\\r','').replace('\\n', '').replace('\r', '')
+        
+        # remove concatenation characters
 
-	joined = joined.replace('+', ' ')
+        joined = joined.replace('+', ' ')
 
-	# remove backslash characters
+        # remove backslash characters
 
-	joined = joined.replace('\\', ' ')
+        joined = joined.replace('\\', ' ')
 
-	# remove quotes
+        # remove quotes
 
-	joined = joined.replace('"', ' ')
-	joined = joined.replace("'", ' ')
+        joined = joined.replace('"', ' ')
+        joined = joined.replace("'", ' ')
 
-	# convert multiple spaces to single spaces
+        # convert multiple spaces to single spaces
 
-	joined = re.sub('  +', ' ', joined)
+        joined = re.sub('  +', ' ', joined)
 
-	# remove explicit concatenation operators
+        # remove explicit concatenation operators
 
-	joined = joined.replace('" + "', '')
-	joined = joined.replace("' + '", '')
+        joined = joined.replace('" + "', '')
+        joined = joined.replace("' + '", '')
 
-	# remove table aliases in a comma-separate list of tables in the FROM
-	# clause of a query
+        # remove table aliases in a comma-separate list of tables in the FROM
+        # clause of a query
 
-	joined = re.sub(' [a-zA-Z0-9]+, *', '!!!', joined)
+        joined = re.sub(' [a-zA-Z0-9]+, *', '!!!', joined)
 
-	# remove Java comments (does not handle nested comments)
+        # remove Java comments (does not handle nested comments)
 
-	startComment = joined.find('/*')
-	while (startComment >= 0):
-		endComment = joined.find('*/', startComment + 2)
+        startComment = joined.find('/*')
+        while (startComment >= 0):
+                endComment = joined.find('*/', startComment + 2)
 
-		if endComment >= 0:
-			joined = joined[:startComment] + joined[endComment+2:]
-			startComment = joined.find('/*')
-		else:
-			startComment = -1
+                if endComment >= 0:
+                        joined = joined[:startComment] + joined[endComment+2:]
+                        startComment = joined.find('/*')
+                else:
+                        startComment = -1
 
-	return joined 
+        return joined 
 
 def findElement(myList, myElement, startPosition = 0):
-	try:
-		return myList.index(myElement, startPosition)
-	except:
-		return None
+        try:
+                return myList.index(myElement, startPosition)
+        except:
+                return None
 
 def process(onOneLine):
 
-	# convert to lowercase and split on whitespace
-	src = joinLines(stripComments(onOneLine)).lower().split()
-	itemCount = len(src)
-	
-	tables = {}
+        # convert to lowercase and split on whitespace
+        src = joinLines(stripComments(onOneLine)).lower().split()
+        itemCount = len(src)
+        
+        tables = {}
 
-	# need to look for tables in a JOIN clause
+        # need to look for tables in a JOIN clause
 
-	pos = findElement(src, 'join')
+        pos = findElement(src, 'join')
 
-	while pos != None:
-		if (pos + 1) < itemCount:
-			tables[src[pos + 1]] = 1
+        while pos != None:
+                if (pos + 1) < itemCount:
+                        tables[src[pos + 1]] = 1
 
-		pos = findElement(src, 'join', pos + 1)
+                pos = findElement(src, 'join', pos + 1)
 
-	# need to look for tables in a FROM clause, where they could be
-	# comma-delimited
+        # need to look for tables in a FROM clause, where they could be
+        # comma-delimited
 
-	pos = findElement(src, 'from')
+        pos = findElement(src, 'from')
 
-	while pos != None:
-		if (pos + 1) < itemCount:
-			t = src[pos + 1]
-			for tbl in t.split('!!!'):
-				tables[tbl] = 1 
+        while pos != None:
+                if (pos + 1) < itemCount:
+                        t = src[pos + 1]
+                        for tbl in t.split('!!!'):
+                                tables[tbl] = 1 
 
-		pos = findElement(src, 'from', pos + 1)
+                pos = findElement(src, 'from', pos + 1)
 
-	# need to look for tables in an UPDATE statement
+        # need to look for tables in an UPDATE statement
 
-	pos = findElement(src, 'update')
+        pos = findElement(src, 'update')
 
-	while pos != None:
-		if (pos + 1) < itemCount:
-			tables[src[pos + 1]] = 1
+        while pos != None:
+                if (pos + 1) < itemCount:
+                        tables[src[pos + 1]] = 1
 
-		pos = findElement(src, 'update', pos + 1)
+                pos = findElement(src, 'update', pos + 1)
 
-	# need to look for tables in a DELETE statement
+        # need to look for tables in a DELETE statement
 
-	pos = findElement(src, 'delete')
+        pos = findElement(src, 'delete')
 
-	while pos != None:
-		if (pos + 1) < itemCount:
-			t = src[pos + 1]
-			if t != 'from':
-				tables[t] = 1
+        while pos != None:
+                if (pos + 1) < itemCount:
+                        t = src[pos + 1]
+                        if t != 'from':
+                                tables[t] = 1
 
-		pos = findElement(src, 'delete', pos + 1)
+                pos = findElement(src, 'delete', pos + 1)
 
-	# need to look for tables in Hibernate @...Table annotations
+        # need to look for tables in Hibernate @...Table annotations
 
-	tableName = re.compile ('''@[A-Za-z.]*Table *\( *name=["']([^'"]+)''')
-	tableAppliesTo = re.compile ('''@[A-Za-z.]*Table *\( *appliesTo=["']([^'"]+)''')
-	srcStr = ' '.join(src)
+        tableName = re.compile ('''@[A-Za-z.]*Table *\( *name=["']([^'"]+)''')
+        tableAppliesTo = re.compile ('''@[A-Za-z.]*Table *\( *appliesTo=["']([^'"]+)''')
+        srcStr = ' '.join(src)
 
-	for regex in [ tableName, tableAppliesTo ]:
-		match = regex.search(srcStr)
-		while match:
-			tables[match.group(1)] = 1
-			match = regex.search(srcStr, match.regs[0][1])
+        for regex in [ tableName, tableAppliesTo ]:
+                match = regex.search(srcStr)
+                while match:
+                        tables[match.group(1)] = 1
+                        match = regex.search(srcStr, match.regs[0][1])
 
-	return tables
+        return tables
 
 def main():
-	handleParms()
-	tables = {}
+        handleParms()
+        tables = {}
 
-	if not files:
-		tables.update(process(readStdin()))
-	for filename in files:
-		tables.update(process(readFile(filename)))
+        if not files:
+                tables.update(process(readStdin()))
+        for filename in files:
+                tables.update(process(readFile(filename)))
 
-	tableList = tables.keys()
-	tableList.sort()
+        tableList = list(tables.keys())
+        tableList.sort()
 
-	for table in tableList:
-		print table 
-	return
+        for table in tableList:
+                print(table) 
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

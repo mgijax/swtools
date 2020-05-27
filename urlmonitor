@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # does performance monitoring for pages specified in an Rcd-formatted
 # configuration file.
@@ -13,37 +13,37 @@ import mgi_utils
 
 USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-t <email>][-f <email>][-e <email>][-l <file>][-n <int>][-r] <input file>
     Options:
-	-s : sleep time between runs (an integer number of minutes)
-	-h : send hourly reports to given email address
-	-d : send daily reports to given email address
-	-t : send timeout reports as they happen to given email address
-	-f : send failure reports as they happen to given email address
-	-e : send error reports as they happen to given email address
-	-l : write all reports to the given log file
-	-n : integer number of runs to do
-	-r : write to stdout a sample Rcd-formatted file
+        -s : sleep time between runs (an integer number of minutes)
+        -h : send hourly reports to given email address
+        -d : send daily reports to given email address
+        -t : send timeout reports as they happen to given email address
+        -f : send failure reports as they happen to given email address
+        -e : send error reports as they happen to given email address
+        -l : write all reports to the given log file
+        -n : integer number of runs to do
+        -r : write to stdout a sample Rcd-formatted file
     Notes:
-	1. The <input file> is an Rcd-formatted file of definitions for the
-	pages to request, the timeout values allowed, the messages to report,
-	etc.  To get a sample file, use the -r option to write one to stdout.
-	2. If you use the -r option for a sample Rcd file, all other options
-	are ignored.
-	3. If the -s option is not specified, the default is to run at
-	thirty minute intervals.
-	4. At least one of the reporting options (-h, -d, -t, -e, -f, -l) must
-	be specified.
-	5. A "timeout" means that the page took longer to return than desired,
-	but that it still was less than our maximum wait time.
-	6. A "failure" means that the page did not return within the maximum
-	wait time, so we stopped waiting.
-	7. An "error" means that a page was returned, but that it contains
-	an error message.
-	8. Log files must be unique; they will not be overwritten.
-	9. If the -n flag is not used to specify a number of runs, the default
-	behavior is to run continuously.  (kill the process to stop it)
-	10. If using the -n flag with the -h or the -d flag, then a final
-	report will be emailed when the last run has finished (in addition to
-	any which occur because of the hourly or daily times).
+        1. The <input file> is an Rcd-formatted file of definitions for the
+        pages to request, the timeout values allowed, the messages to report,
+        etc.  To get a sample file, use the -r option to write one to stdout.
+        2. If you use the -r option for a sample Rcd file, all other options
+        are ignored.
+        3. If the -s option is not specified, the default is to run at
+        thirty minute intervals.
+        4. At least one of the reporting options (-h, -d, -t, -e, -f, -l) must
+        be specified.
+        5. A "timeout" means that the page took longer to return than desired,
+        but that it still was less than our maximum wait time.
+        6. A "failure" means that the page did not return within the maximum
+        wait time, so we stopped waiting.
+        7. An "error" means that a page was returned, but that it contains
+        an error message.
+        8. Log files must be unique; they will not be overwritten.
+        9. If the -n flag is not used to specify a number of runs, the default
+        behavior is to run continuously.  (kill the process to stop it)
+        10. If using the -n flag with the -h or the -d flag, then a final
+        report will be emailed when the last run has finished (in addition to
+        any which occur because of the hourly or daily times).
 ''' % sys.argv[0]
 
 ###------------------------###
@@ -52,30 +52,30 @@ USAGE = '''Usage: %s [-s <int>][-h <email>][-d <email>][-t <email>][-f <email>][
 
 # command-line options:
 
-EHOURLY=None		# email address for hourly reporting
-EDAILY=None		# email address for daily reporting
-TIMEOUT=None		# email address for timeout reporting
-FAILURE=None		# email address for failure reporting
-ERROR=None		# email address for error reporting
-LOG=None		# log file location for all reporting
-SLEEPTIME=30 * 60	# time (in seconds) between runs
-RUNS_LEFT=None		# if non-None, integer number of runs left to do
+EHOURLY=None            # email address for hourly reporting
+EDAILY=None             # email address for daily reporting
+TIMEOUT=None            # email address for timeout reporting
+FAILURE=None            # email address for failure reporting
+ERROR=None              # email address for error reporting
+LOG=None                # log file location for all reporting
+SLEEPTIME=30 * 60       # time (in seconds) between runs
+RUNS_LEFT=None          # if non-None, integer number of runs left to do
 
 # input file records:
 
-PAGES=[]	# list of Page objects
+PAGES=[]        # list of Page objects
 
 # monitoring for reporting:
 
 DAILY={}    # URL -> (list of timings, # timeouts, # failures, # errors)
 HOURLY={}   # URL -> (list of timings, # timeouts, # failures, # errors)
-DAILY_STARTS=[]	  # list of "mm/dd/yyyy hh:mm:ss" start times for whole day
+DAILY_STARTS=[]   # list of "mm/dd/yyyy hh:mm:ss" start times for whole day
 HOURLY_STARTS=[]  # list of "mm/dd/yyyy hh:mm:ss" start times for this hour
 HOURLY_REPORTS=0  # count of hourly reports completed
 
 # internal tracking:
 
-NEXT_REPORT = time.time() + 3600	# 1 hour * 60 min * 60 sec from now
+NEXT_REPORT = time.time() + 3600        # 1 hour * 60 min * 60 sec from now
 NEXT_RUN = time.time()
 
 DIVIDER = '###%s###\n' % ('-' * 64)
@@ -85,441 +85,441 @@ DIVIDER = '###%s###\n' % ('-' * 64)
 ###---------------###
 
 class Page:
-	def __init__ (self, name, url, allowed, maxtime, timeoutMsg,
-			failureMsg, errorMsg):
-		self.name = name
-		self.url = url
-		self.allowed = int(allowed)
-		self.maxtime = int(maxtime)
-		self.timeoutMsg = timeoutMsg
-		self.failureMsg = failureMsg
-		self.errorMsg = errorMsg
-		return
+        def __init__ (self, name, url, allowed, maxtime, timeoutMsg,
+                        failureMsg, errorMsg):
+                self.name = name
+                self.url = url
+                self.allowed = int(allowed)
+                self.maxtime = int(maxtime)
+                self.timeoutMsg = timeoutMsg
+                self.failureMsg = failureMsg
+                self.errorMsg = errorMsg
+                return
 
-	def getUrl (self):
-		return self.url
+        def getUrl (self):
+                return self.url
 
-	def buildMessage (self, message, elapsed):
-		# process special tags in message
+        def buildMessage (self, message, elapsed):
+                # process special tags in message
 
-		if message.find('<NL>') >= 0:
-			message = message.replace ('<NL>', '\n')
-		if message.find('<NAME>') >= 0:
-			message = message.replace ('<NAME>', self.name)
-		if message.find('<URL>') >= 0:
-			message = message.replace ('<URL>', self.url)
-		if message.find('<ALLOWED>') >= 0:
-			message = message.replace ('<ALLOWED>',
-				str(self.allowed))
-		if message.find('<MAXTIME>') >= 0:
-			message = message.replace ('<MAXTIME>',
-				str(self.maxtime))
-		if message.find('<DATE>') >= 0:
-			message = message.replace ('<DATE>', time.strftime (
-				"%m/%d/%Y", time.localtime (time.time()) ))
-		if message.find('<TIME>') >= 0:
-			message = message.replace ('<TIME>', time.strftime (
-				"%H:%M:%S", time.localtime (time.time()) ))
-		if message.find('<ELAPSED>') >= 0:
-			message = message.replace ('<ELAPSED>', 
-				'%0.1f' % elapsed)
-		return message
+                if message.find('<NL>') >= 0:
+                        message = message.replace ('<NL>', '\n')
+                if message.find('<NAME>') >= 0:
+                        message = message.replace ('<NAME>', self.name)
+                if message.find('<URL>') >= 0:
+                        message = message.replace ('<URL>', self.url)
+                if message.find('<ALLOWED>') >= 0:
+                        message = message.replace ('<ALLOWED>',
+                                str(self.allowed))
+                if message.find('<MAXTIME>') >= 0:
+                        message = message.replace ('<MAXTIME>',
+                                str(self.maxtime))
+                if message.find('<DATE>') >= 0:
+                        message = message.replace ('<DATE>', time.strftime (
+                                "%m/%d/%Y", time.localtime (time.time()) ))
+                if message.find('<TIME>') >= 0:
+                        message = message.replace ('<TIME>', time.strftime (
+                                "%H:%M:%S", time.localtime (time.time()) ))
+                if message.find('<ELAPSED>') >= 0:
+                        message = message.replace ('<ELAPSED>', 
+                                '%0.1f' % elapsed)
+                return message
 
-	def measure (self):
-		# returns (elapsed time, timeout msg, failure msg, error msg)
+        def measure (self):
+                # returns (elapsed time, timeout msg, failure msg, error msg)
 
-		startTime = time.time()
-		(contents, error) = httpReader.getURL(self.url, 
-			timeout = self.maxtime)
-		stopTime = time.time()
-		elapsed = stopTime - startTime
+                startTime = time.time()
+                (contents, error) = httpReader.getURL(self.url, 
+                        timeout = self.maxtime)
+                stopTime = time.time()
+                elapsed = stopTime - startTime
 
-		timeMsg = None
-		failMsg = None
-		errMsg = None
+                timeMsg = None
+                failMsg = None
+                errMsg = None
 
-		if error:
-			if error.find ('timed out') >= 0:
-				failMsg = self.buildMessage (self.failureMsg,
-					elapsed)
-			else:
-				errMsg = self.buildMessage (self.errorMsg,
-					elapsed)
+                if error:
+                        if error.find ('timed out') >= 0:
+                                failMsg = self.buildMessage (self.failureMsg,
+                                        elapsed)
+                        else:
+                                errMsg = self.buildMessage (self.errorMsg,
+                                        elapsed)
 
-		if contents:
-			page = '\n'.join (contents).lower()
-		else:
-			page = ''
+                if contents:
+                        page = '\n'.join (contents).lower()
+                else:
+                        page = ''
 
-		if (page.find('server error') >= 0) or \
-				(page.find('exception') >= 0):
-			errMsg = self.buildMessage (self.errorMsg, elapsed)
+                if (page.find('server error') >= 0) or \
+                                (page.find('exception') >= 0):
+                        errMsg = self.buildMessage (self.errorMsg, elapsed)
 
-		if (not (failMsg or errMsg)) and (elapsed > self.allowed):
-			timeMsg = self.buildMessage (self.timeoutMsg, elapsed)
-		
-		return (elapsed, timeMsg, failMsg, errMsg)
+                if (not (failMsg or errMsg)) and (elapsed > self.allowed):
+                        timeMsg = self.buildMessage (self.timeoutMsg, elapsed)
+                
+                return (elapsed, timeMsg, failMsg, errMsg)
 
 ###-----------------###
 ###--- functions ---###
 ###-----------------###
 
 def bailout (msg, showUsage=False):
-	if showUsage:
-		sys.stderr.write (USAGE)
-	sys.stderr.write ('Error: %s\n' % msg)
-	sys.exit(1)
+        if showUsage:
+                sys.stderr.write (USAGE)
+        sys.stderr.write ('Error: %s\n' % msg)
+        sys.exit(1)
 
 def getPages (rcdfile):
-	globalAllowed = rcdfile.getConstant ('ALLOWED')
-	globalMaxtime = rcdfile.getConstant ('MAXTIME')
-	globalTimeout = rcdfile.getConstant ('TIMEOUT')
-	globalFailure = rcdfile.getConstant ('FAILURE')
-	globalError = rcdfile.getConstant ('ERROR')
+        globalAllowed = rcdfile.getConstant ('ALLOWED')
+        globalMaxtime = rcdfile.getConstant ('MAXTIME')
+        globalTimeout = rcdfile.getConstant ('TIMEOUT')
+        globalFailure = rcdfile.getConstant ('FAILURE')
+        globalError = rcdfile.getConstant ('ERROR')
 
-	if not globalAllowed:
-		bailout ('Global constant ALLOWED missing from file')
-	if not globalMaxtime:
-		bailout ('Global constant MAXTIME missing from file')
-	if not globalTimeout:
-		bailout ('Global constant TIMEOUT missing from file')
-	if not globalFailure:
-		bailout ('Global constant FAILURE missing from file')
-	if not globalError:
-		bailout ('Global constant ERROR missing from file')
+        if not globalAllowed:
+                bailout ('Global constant ALLOWED missing from file')
+        if not globalMaxtime:
+                bailout ('Global constant MAXTIME missing from file')
+        if not globalTimeout:
+                bailout ('Global constant TIMEOUT missing from file')
+        if not globalFailure:
+                bailout ('Global constant FAILURE missing from file')
+        if not globalError:
+                bailout ('Global constant ERROR missing from file')
 
-	pages = []
+        pages = []
 
-	for (name, rcd) in rcdfile.items():
-		page = rcd['PAGE']
-		if not page:
-			bailout ('Page "%s" missing required PAGE parameter' \
-				% name)
+        for (name, rcd) in list(rcdfile.items()):
+                page = rcd['PAGE']
+                if not page:
+                        bailout ('Page "%s" missing required PAGE parameter' \
+                                % name)
 
-		allowed = rcd['ALLOWED']
-		if not allowed:
-			allowed = globalAllowed
+                allowed = rcd['ALLOWED']
+                if not allowed:
+                        allowed = globalAllowed
 
-		maxtime = rcd['MAXTIME']
-		if not maxtime:
-			maxtime = globalMaxtime
+                maxtime = rcd['MAXTIME']
+                if not maxtime:
+                        maxtime = globalMaxtime
 
-		timeout = rcd['TIMEOUT']
-		if not timeout:
-			timeout = globalTimeout
+                timeout = rcd['TIMEOUT']
+                if not timeout:
+                        timeout = globalTimeout
 
-		failure = rcd['FAILURE']
-		if not failure:
-			failure = globalFailure
+                failure = rcd['FAILURE']
+                if not failure:
+                        failure = globalFailure
 
-		error = rcd['ERROR']
-		if not error:
-			error = globalError
+                error = rcd['ERROR']
+                if not error:
+                        error = globalError
 
-		values = rcd['VALUES']
-		if not values:
-			urls = [ page ]
-		else:
-			urls = []
-			for value in values.split(','):
-				urls.append (page + value.strip())
+                values = rcd['VALUES']
+                if not values:
+                        urls = [ page ]
+                else:
+                        urls = []
+                        for value in values.split(','):
+                                urls.append (page + value.strip())
 
-		for url in urls:
-			pages.append (Page (name, url, allowed, maxtime,
-				timeout, failure, error) )
-	return pages
+                for url in urls:
+                        pages.append (Page (name, url, allowed, maxtime,
+                                timeout, failure, error) )
+        return pages
 
 def processCommandLine():
-	global EHOURLY, EDAILY, TIMEOUT, FAILURE, ERROR, LOG, SLEEPTIME, PAGES
-	global RUNS_LEFT
+        global EHOURLY, EDAILY, TIMEOUT, FAILURE, ERROR, LOG, SLEEPTIME, PAGES
+        global RUNS_LEFT
 
-	try:
-		(options, args) = getopt.getopt(sys.argv[1:],
-			's:h:d:t:f:e:l:n:r')
-	except getopt.GetoptError:
-		bailout ('Improper command-line option(s)', True)
+        try:
+                (options, args) = getopt.getopt(sys.argv[1:],
+                        's:h:d:t:f:e:l:n:r')
+        except getopt.GetoptError:
+                bailout ('Improper command-line option(s)', True)
 
-	for (option, value) in options:
-		if option == '-s':
-			try:
-				SLEEPTIME = int(value) * 60
-			except:
-				bailout ('-s flag requires integer value', True)
-		elif option == '-n':
-			try:
-				RUNS_LEFT = int(value)
-			except:
-				bailout ('-n flag requires integer value', True)
-		elif option == '-h':
-			EHOURLY = value
-		elif option == '-d':
-			EDAILY = value
-		elif option == '-t':
-			TIMEOUT = value
-		elif option == '-f':
-			FAILURE = value
-		elif option == '-e':
-			ERROR = value
-		elif option == '-l':
-			LOG = value
-			if os.path.exists (LOG):
-				bailout ('Log file already exists: %s' % LOG, True)
-			try:
-				fp = open (LOG, 'w')
-				fp.write ('Start time: ')
-				fp.write (time.strftime('%m/%d/%Y %H:%M:%S\n',
-					time.localtime (time.time()) ))
-				fp.write ('Command line: %s\n' % \
-					' '.join (sys.argv))
-				fp.write ('Monitoring %d pages\n' % len(PAGES))
-				fp.write (DIVIDER)
-				fp.close()
-			except:
-				bailout ('Cannot write to log file: %s' % LOG, True)
-		elif option == '-r':
-			print SAMPLE_RCD
-			sys.exit(0)
-		else:
-			bailout ('Unrecognized option: %s' % option, True)
+        for (option, value) in options:
+                if option == '-s':
+                        try:
+                                SLEEPTIME = int(value) * 60
+                        except:
+                                bailout ('-s flag requires integer value', True)
+                elif option == '-n':
+                        try:
+                                RUNS_LEFT = int(value)
+                        except:
+                                bailout ('-n flag requires integer value', True)
+                elif option == '-h':
+                        EHOURLY = value
+                elif option == '-d':
+                        EDAILY = value
+                elif option == '-t':
+                        TIMEOUT = value
+                elif option == '-f':
+                        FAILURE = value
+                elif option == '-e':
+                        ERROR = value
+                elif option == '-l':
+                        LOG = value
+                        if os.path.exists (LOG):
+                                bailout ('Log file already exists: %s' % LOG, True)
+                        try:
+                                fp = open (LOG, 'w')
+                                fp.write ('Start time: ')
+                                fp.write (time.strftime('%m/%d/%Y %H:%M:%S\n',
+                                        time.localtime (time.time()) ))
+                                fp.write ('Command line: %s\n' % \
+                                        ' '.join (sys.argv))
+                                fp.write ('Monitoring %d pages\n' % len(PAGES))
+                                fp.write (DIVIDER)
+                                fp.close()
+                        except:
+                                bailout ('Cannot write to log file: %s' % LOG, True)
+                elif option == '-r':
+                        print(SAMPLE_RCD)
+                        sys.exit(0)
+                else:
+                        bailout ('Unrecognized option: %s' % option, True)
 
-	if len(args) > 1:
-		bailout ('Too many command-line arguments', True)
-	if len(args) == 0:
-		bailout ('Missing <input file> command-line argument', True)
+        if len(args) > 1:
+                bailout ('Too many command-line arguments', True)
+        if len(args) == 0:
+                bailout ('Missing <input file> command-line argument', True)
 
-	try:
-		rcdfile = rcdlib.RcdFile (args[0], rcdlib.Rcd, 'NAME')
-	except rcdlib.error, message:
-		bailout (message, True)
-	except IOError:
-		bailout ('Cannot read file: %s' % args[0], True)
-	PAGES = getPages (rcdfile)
+        try:
+                rcdfile = rcdlib.RcdFile (args[0], rcdlib.Rcd, 'NAME')
+        except rcdlib.error as message:
+                bailout (message, True)
+        except IOError:
+                bailout ('Cannot read file: %s' % args[0], True)
+        PAGES = getPages (rcdfile)
 
-	if not (EHOURLY or EDAILY or TIMEOUT or FAILURE or ERROR or LOG):
-		bailout ('At least one of -h, -d, -t, -f, -e, or -l must be used', True)
-	return
+        if not (EHOURLY or EDAILY or TIMEOUT or FAILURE or ERROR or LOG):
+                bailout ('At least one of -h, -d, -t, -f, -e, or -l must be used', True)
+        return
 
 def highLowAverage (times):
-	if not times:
-		return 0.0, 0.0, 0.0
+        if not times:
+                return 0.0, 0.0, 0.0
 
-	sum = 0.0
-	low = times[0]
-	high = times[0]
+        sum = 0.0
+        low = times[0]
+        high = times[0]
 
-	for time in times:
-		sum = sum + time
-		if time < low:
-			low = time
-		elif time > high:
-			high = time
+        for time in times:
+                sum = sum + time
+                if time < low:
+                        low = time
+                elif time > high:
+                        high = time
 
-	return high, low, sum * 1.0 / len(times)
+        return high, low, sum * 1.0 / len(times)
 
 def generateReport (header, stats, startTimes):
-	top = [ header,
-		'%d pages monitored for %d runs' % 
-			(len(stats), len(startTimes)),
-		 ]
-	
-	lines = []
+        top = [ header,
+                '%d pages monitored for %d runs' % 
+                        (len(stats), len(startTimes)),
+                 ]
+        
+        lines = []
 
-	urls = stats.keys()
-	urls.sort()
+        urls = list(stats.keys())
+        urls.sort()
 
-	allTimeCt = allFailCt = allErrCt = 0
+        allTimeCt = allFailCt = allErrCt = 0
 
-	for url in urls:
-		[ times, timeCt, failCt, errCt ] = stats[url]
-		lines.append (url)
+        for url in urls:
+                [ times, timeCt, failCt, errCt ] = stats[url]
+                lines.append (url)
 
-		if times:
-			high, low, average = highLowAverage (times)
-			lines.append ('\tShortest time: %0.1f sec' % low)
-			lines.append ('\tLongest time:  %0.1f sec' % high)
-			lines.append ('\tAverage time:  %0.1f sec' % average)
+                if times:
+                        high, low, average = highLowAverage (times)
+                        lines.append ('\tShortest time: %0.1f sec' % low)
+                        lines.append ('\tLongest time:  %0.1f sec' % high)
+                        lines.append ('\tAverage time:  %0.1f sec' % average)
 
-		if timeCt:
-			lines.append ('\tTimes over threshold: %d' % timeCt)
-			allTimeCt = allTimeCt + timeCt
-		if failCt:
-			lines.append ('\tTimeouts (stopped waiting): %d' % \
-				failCt)
-			allFailCt = allFailCt + failCt
-		if errCt:
-			lines.append ('\tPages with errors: %d' % errCt)
-			allErrCt = allErrCt + errCt
+                if timeCt:
+                        lines.append ('\tTimes over threshold: %d' % timeCt)
+                        allTimeCt = allTimeCt + timeCt
+                if failCt:
+                        lines.append ('\tTimeouts (stopped waiting): %d' % \
+                                failCt)
+                        allFailCt = allFailCt + failCt
+                if errCt:
+                        lines.append ('\tPages with errors: %d' % errCt)
+                        allErrCt = allErrCt + errCt
 
-	top.append ('\tTimes over threshold: %d' % allTimeCt)
-	top.append ('\tTimeouts (stopped waiting): %d' % allFailCt)
-	top.append ('\tPages with errors: %d' % allErrCt)
+        top.append ('\tTimes over threshold: %d' % allTimeCt)
+        top.append ('\tTimeouts (stopped waiting): %d' % allFailCt)
+        top.append ('\tPages with errors: %d' % allErrCt)
 
-	lines.append ('Start times of runs:')
-	for startTime in startTimes:
-		lines.append ('\t%s' % startTime)
+        lines.append ('Start times of runs:')
+        for startTime in startTimes:
+                lines.append ('\t%s' % startTime)
 
-	return '\n'.join (top + lines)
+        return '\n'.join (top + lines)
 
 def moveHourlyToDaily():
-	global DAILY_STARTS, DAILY
+        global DAILY_STARTS, DAILY
 
-	DAILY_STARTS = DAILY_STARTS + HOURLY_STARTS
-	if not DAILY:
-		DAILY = HOURLY
-	else:
-		for (url, stats) in HOURLY.items():
-			if not DAILY.has_key (url):
-				DAILY[url] = stats
-			else:
-				t = DAILY[url]
-				DAILY[url] = [
-					t[0] + stats[0], t[1] + stats[1],
-					t[2] + stats[2], t[3] + stats[3] ]
-	return
+        DAILY_STARTS = DAILY_STARTS + HOURLY_STARTS
+        if not DAILY:
+                DAILY = HOURLY
+        else:
+                for (url, stats) in list(HOURLY.items()):
+                        if url not in DAILY:
+                                DAILY[url] = stats
+                        else:
+                                t = DAILY[url]
+                                DAILY[url] = [
+                                        t[0] + stats[0], t[1] + stats[1],
+                                        t[2] + stats[2], t[3] + stats[3] ]
+        return
 
 def finalReport():
-	if HOURLY_STARTS:
-		moveHourlyToDaily()
+        if HOURLY_STARTS:
+                moveHourlyToDaily()
 
-	report = generateReport ('Final Report for Fixed Number of Runs',
-		DAILY, DAILY_STARTS)
-	logMessage (report)
-	sendMessage (report, 'Final Report for Fixed Number of Runs', EHOURLY)
-	if (EHOURLY != EDAILY):
-		sendMessage (report, 'Final Report for Fixed Number of Runs',
-			EDAILY)
-	return
+        report = generateReport ('Final Report for Fixed Number of Runs',
+                DAILY, DAILY_STARTS)
+        logMessage (report)
+        sendMessage (report, 'Final Report for Fixed Number of Runs', EHOURLY)
+        if (EHOURLY != EDAILY):
+                sendMessage (report, 'Final Report for Fixed Number of Runs',
+                        EDAILY)
+        return
 
 def dailyReport():
-	global DAILY, DAILY_STARTS
+        global DAILY, DAILY_STARTS
 
-	if LOG or EDAILY:
-		report = generateReport ('Daily Report', DAILY, DAILY_STARTS)
-		logMessage (report)
-		sendMessage (report, 'Daily Report', EDAILY)
-		
-	DAILY = {}
-	DAILY_STARTS = []
+        if LOG or EDAILY:
+                report = generateReport ('Daily Report', DAILY, DAILY_STARTS)
+                logMessage (report)
+                sendMessage (report, 'Daily Report', EDAILY)
+                
+        DAILY = {}
+        DAILY_STARTS = []
 
-	return
+        return
 
 def hourlyReport():
-	global HOURLY_REPORTS, HOURLY_STARTS, DAILY_STARTS
-	global DAILY, HOURLY
+        global HOURLY_REPORTS, HOURLY_STARTS, DAILY_STARTS
+        global DAILY, HOURLY
 
-	if LOG or EHOURLY:
-		report = generateReport ('Hourly Report', HOURLY,
-			HOURLY_STARTS)
-		logMessage (report)
-		sendMessage (report, 'Hourly Report', EHOURLY)
+        if LOG or EHOURLY:
+                report = generateReport ('Hourly Report', HOURLY,
+                        HOURLY_STARTS)
+                logMessage (report)
+                sendMessage (report, 'Hourly Report', EHOURLY)
 
-	# update daily data with data for the hour that just passed
+        # update daily data with data for the hour that just passed
 
-	moveHourlyToDaily()
+        moveHourlyToDaily()
 
-	# get ready for the next hour
+        # get ready for the next hour
 
-	HOURLY_REPORTS = HOURLY_REPORTS + 1
-	HOURLY_STARTS = []
-	HOURLY = {}
-	return
+        HOURLY_REPORTS = HOURLY_REPORTS + 1
+        HOURLY_STARTS = []
+        HOURLY = {}
+        return
 
 def logMessage (message):
-	if LOG:
-		fp = open (LOG, 'a')
-		fp.write (message + '\n')
-		fp.write (DIVIDER)
-		fp.close()
-	return
+        if LOG:
+                fp = open (LOG, 'a')
+                fp.write (message + '\n')
+                fp.write (DIVIDER)
+                fp.close()
+        return
 
 def sendMessage (message, subject, email):
-	if email:
-		try:
-			mgi_utils.send_Mail ('urlmonitor', email, subject,
-				message)
-		except:
-			logMessage (
-				'Failed to send email to: %s (subject: %s)' \
-				% (email, subject))
-	return
+        if email:
+                try:
+                        mgi_utils.send_Mail ('urlmonitor', email, subject,
+                                message)
+                except:
+                        logMessage (
+                                'Failed to send email to: %s (subject: %s)' \
+                                % (email, subject))
+        return
 
 def measure():
-	global HOURLY_STARTS, HOURLY
+        global HOURLY_STARTS, HOURLY
 
-	HOURLY_STARTS.append (time.strftime ('%m/%d/%Y %H:%M:%S',
-		time.localtime (time.time()) ))
-	for page in PAGES:
-		elapsed, timeMsg, failMsg, errMsg = page.measure()
-		timeCt = failCt = errCt = 0
+        HOURLY_STARTS.append (time.strftime ('%m/%d/%Y %H:%M:%S',
+                time.localtime (time.time()) ))
+        for page in PAGES:
+                elapsed, timeMsg, failMsg, errMsg = page.measure()
+                timeCt = failCt = errCt = 0
 
-		hadError = timeMsg or failMsg or errMsg
-		if hadError:
-			if timeMsg:
-				sendMessage (timeMsg, 'Warning: Timeout',
-					TIMEOUT)
-				logMessage (timeMsg)
-				timeCt = 1
-			if failMsg:
-				sendMessage (failMsg, 'Warning: No Return',
-					FAILURE)
-				logMessage (failMsg)
-				failCt = 1
-			if errMsg:
-				sendMessage (errMsg, 'Error: Page Failed',
-					ERROR)
-				logMessage (errMsg)
-				errCt = 1
-			elapsedList = []
-		else:
-			elapsedList = [ elapsed ]
+                hadError = timeMsg or failMsg or errMsg
+                if hadError:
+                        if timeMsg:
+                                sendMessage (timeMsg, 'Warning: Timeout',
+                                        TIMEOUT)
+                                logMessage (timeMsg)
+                                timeCt = 1
+                        if failMsg:
+                                sendMessage (failMsg, 'Warning: No Return',
+                                        FAILURE)
+                                logMessage (failMsg)
+                                failCt = 1
+                        if errMsg:
+                                sendMessage (errMsg, 'Error: Page Failed',
+                                        ERROR)
+                                logMessage (errMsg)
+                                errCt = 1
+                        elapsedList = []
+                else:
+                        elapsedList = [ elapsed ]
 
-		url = page.getUrl()
-		if not HOURLY.has_key (url):
-			stats = [ elapsedList, timeCt, failCt, errCt ]
-			HOURLY[url] = stats
-		else:
-			stats = HOURLY[url]
-			HOURLY[url] = [ stats[0] + elapsedList,
-				stats[1] + timeCt,
-				stats[2] + failCt,
-				stats[3] + errCt ]
-	return
+                url = page.getUrl()
+                if url not in HOURLY:
+                        stats = [ elapsedList, timeCt, failCt, errCt ]
+                        HOURLY[url] = stats
+                else:
+                        stats = HOURLY[url]
+                        HOURLY[url] = [ stats[0] + elapsedList,
+                                stats[1] + timeCt,
+                                stats[2] + failCt,
+                                stats[3] + errCt ]
+        return
 
 def main():
-	global HOURLY_REPORTS, NEXT_RUN, NEXT_REPORT, RUNS_LEFT
+        global HOURLY_REPORTS, NEXT_RUN, NEXT_REPORT, RUNS_LEFT
 
-	while True:
-		if time.time() >= NEXT_RUN:
-			measure()
-			NEXT_RUN = NEXT_RUN + SLEEPTIME
+        while True:
+                if time.time() >= NEXT_RUN:
+                        measure()
+                        NEXT_RUN = NEXT_RUN + SLEEPTIME
 
-		if time.time() >= NEXT_REPORT:
-			hourlyReport()
-			if HOURLY_REPORTS >= 24:
-				dailyReport()
-				HOURLY_REPORTS = 0
-			NEXT_REPORT = NEXT_REPORT + 3600
+                if time.time() >= NEXT_REPORT:
+                        hourlyReport()
+                        if HOURLY_REPORTS >= 24:
+                                dailyReport()
+                                HOURLY_REPORTS = 0
+                        NEXT_REPORT = NEXT_REPORT + 3600
 
-		if RUNS_LEFT != None:
-			RUNS_LEFT = RUNS_LEFT - 1
-			if RUNS_LEFT == 0:
-				finalReport()
-				sys.exit(0)
+                if RUNS_LEFT != None:
+                        RUNS_LEFT = RUNS_LEFT - 1
+                        if RUNS_LEFT == 0:
+                                finalReport()
+                                sys.exit(0)
 
-		# must have at least a 2 second delay before the next run
-		# (arbitrary; just need a cushion to get through the next
-		# few lines without taking a chance on a negative sleep time)
+                # must have at least a 2 second delay before the next run
+                # (arbitrary; just need a cushion to get through the next
+                # few lines without taking a chance on a negative sleep time)
 
-		checkTime = time.time() + 2
-		if (checkTime > NEXT_RUN) or (checkTime > NEXT_REPORT):
-			bailout ('-s value is too small for the ' + \
-				'number of pages being monitored', True)
+                checkTime = time.time() + 2
+                if (checkTime > NEXT_RUN) or (checkTime > NEXT_REPORT):
+                        bailout ('-s value is too small for the ' + \
+                                'number of pages being monitored', True)
 
-		if NEXT_RUN <= NEXT_REPORT:
-			time.sleep (NEXT_RUN - time.time())
-		else:
-			time.sleep (NEXT_REPORT - time.time())
-	return
+                if NEXT_RUN <= NEXT_REPORT:
+                        time.sleep (NEXT_RUN - time.time())
+                else:
+                        time.sleep (NEXT_REPORT - time.time())
+        return
 
 ###-----------------------###
 ###--- sample rcd file ---###
@@ -609,6 +609,6 @@ PAGE=${JAVAWI}markerQF
 ###--------------------###
 
 if __name__ == '__main__':
-	processCommandLine()
-	main()
+        processCommandLine()
+        main()
 

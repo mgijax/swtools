@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # finds tables and views which exist in files given on the command-line
 # or from filenames piped into stdin (enhanced to also find stored procedures)
@@ -9,12 +9,12 @@ import string
 import regex
 
 USAGE = '''USAGE: %s [-v][-z] [<filename>...]
-	-c : confirm matches against database (default is to show suspects)
-	-v : verbose (show matching lines; default is not verbose)
-	-z : show zero-count results as well (skipped by default)
+        -c : confirm matches against database (default is to show suspects)
+        -v : verbose (show matching lines; default is not verbose)
+        -z : show zero-count results as well (skipped by default)
 
-	May pipe filenames into stdin rather than listing on cmd line.
-	Most useful when using -c option.
+        May pipe filenames into stdin rather than listing on cmd line.
+        Most useful when using -c option.
 ''' % sys.argv[0]
 
 ###--- Globals ---###
@@ -33,156 +33,156 @@ tbl_re = regex.compile ('\([A-Za-z][A-Za-z][A-Za-z]?_[A-Za-z_0-9]+\)')
 ###--- Functions ---###
 
 def bailout(s = None):
-	if s:
-		print '-' * len(s)
-		print s
-		print '-' * len(s)
-	print USAGE
-	sys.exit(-1)
+        if s:
+                print('-' * len(s))
+                print(s)
+                print('-' * len(s))
+        print(USAGE)
+        sys.exit(-1)
 
 def handleParms ():
-	global files, confirm, showZero, verbose
+        global files, confirm, showZero, verbose
 
-	try:
-		options, args = getopt.getopt (sys.argv[1:], 'cvz')
-	except getopt.error:
-		bailout ('Error in options')
+        try:
+                options, args = getopt.getopt (sys.argv[1:], 'cvz')
+        except getopt.error:
+                bailout ('Error in options')
 
-	if args:
-		files = files + args
-	for (opt, value) in options:
-		if opt == '-c':
-			confirm = 1
-		elif opt == '-v':
-			verbose = 1
-		elif opt == '-z':
-			showZero = 1
-	return
+        if args:
+                files = files + args
+        for (opt, value) in options:
+                if opt == '-c':
+                        confirm = 1
+                elif opt == '-v':
+                        verbose = 1
+                elif opt == '-z':
+                        showZero = 1
+        return
 
 def loadTablesViews ():
-	global tables, views, procedures
+        global tables, views, procedures
 
-	try:
-		import db
-		db.set_sqlLogin ('mgd_public', 'mgdpub', 'DEV_MGI', 'mgd')
-	except:
-		bailout('Cannot find db module.  Please execute on a server.')
+        try:
+                import db
+                db.set_sqlLogin ('mgd_public', 'mgdpub', 'DEV_MGI', 'mgd')
+        except:
+                bailout('Cannot find db module.  Please execute on a server.')
 
-	results = db.sql ('''select name, type
-			from sysobjects
-			where type in ("V", "U", "P")''', 'auto')
-	for row in results:
-		if row['type'] == 'V ':
-			views[row['name']] = 1
-		elif row['type'] == 'U ':
-			tables[row['name']] = 1
-		elif row['type'] == 'P ':
-			procedures[row['name']] = 1
-	return
+        results = db.sql ('''select name, type
+                        from sysobjects
+                        where type in ("V", "U", "P")''', 'auto')
+        for row in results:
+                if row['type'] == 'V ':
+                        views[row['name']] = 1
+                elif row['type'] == 'U ':
+                        tables[row['name']] = 1
+                elif row['type'] == 'P ':
+                        procedures[row['name']] = 1
+        return
 
 def readStdin ():
-	global files
+        global files
 
-	line = sys.stdin.readline()
-	while line:
-		files.append (string.strip(line))
-		line = sys.stdin.readline()
-	return
+        line = sys.stdin.readline()
+        while line:
+                files.append (string.strip(line))
+                line = sys.stdin.readline()
+        return
 
 def isLetter (c):
-	return ('A' <= c <= 'Z') or ('a' <= c <= 'z')
+        return ('A' <= c <= 'Z') or ('a' <= c <= 'z')
 
 def doLine (s):
-	if string.find (s, '_') == -1:
-		return []
-	line_tables = []
-	pos = tbl_re.search (s)
-	while pos != -1:
-		if (pos > 0) and not isLetter(s[pos-1]):
-			table = tbl_re.group(1)
-			if table not in line_tables:
-				line_tables.append(table)
-		pos = tbl_re.search (s, tbl_re.regs[0][1])
+        if string.find (s, '_') == -1:
+                return []
+        line_tables = []
+        pos = tbl_re.search (s)
+        while pos != -1:
+                if (pos > 0) and not isLetter(s[pos-1]):
+                        table = tbl_re.group(1)
+                        if table not in line_tables:
+                                line_tables.append(table)
+                pos = tbl_re.search (s, tbl_re.regs[0][1])
 
-	if not confirm:
-		return line_tables
+        if not confirm:
+                return line_tables
 
-	my_tables = []
-	for table in line_tables:
-		if tables.has_key (table) or views.has_key (table) or \
-				procedures.has_key(table):
-			my_tables.append (table)
-	return my_tables
+        my_tables = []
+        for table in line_tables:
+                if table in tables or table in views or \
+                                table in procedures:
+                        my_tables.append (table)
+        return my_tables
 
 def doFile (fn):
-	try:
-		fp = open (fn, 'r')
-	except:
-		print '%s -- ERROR: Cannot open' % fn
-		return
-	file_tables = []
+        try:
+                fp = open (fn, 'r')
+        except:
+                print('%s -- ERROR: Cannot open' % fn)
+                return
+        file_tables = []
 
-	if verbose:
-		print '------------------- beginning %s matches' % fn
+        if verbose:
+                print('------------------- beginning %s matches' % fn)
 
-	line = fp.readline()
-	while line:
-		line_tables = doLine(line)
-		if verbose and line_tables:
-			print string.rstrip(line)
-		for table in line_tables:
-			if table not in file_tables:
-				file_tables.append (table)
-		line = fp.readline()
-	fp.close()
+        line = fp.readline()
+        while line:
+                line_tables = doLine(line)
+                if verbose and line_tables:
+                        print(string.rstrip(line))
+                for table in line_tables:
+                        if table not in file_tables:
+                                file_tables.append (table)
+                line = fp.readline()
+        fp.close()
 
-	if verbose:
-		print '-------------------- ending %s matches' % fn
+        if verbose:
+                print('-------------------- ending %s matches' % fn)
 
-	if confirm:
-		my_tables = []
-		my_views = []
-		my_procedures = []
+        if confirm:
+                my_tables = []
+                my_views = []
+                my_procedures = []
 
-		for table in file_tables:
-			if tables.has_key (table):
-				my_tables.append (table)
-			elif views.has_key (table):
-				my_views.append (table)
-			elif procedures.has_key (table):
-				my_procedures.append (table)
-		my_tables.sort()
-		my_views.sort()
-		my_procedures.sort()
-		if showZero or my_tables:
-			print '%s [%d tables]' % (fn, len(my_tables))
-			for table in my_tables:
-				print '    %s' % table
-		if showZero or my_procedures:
-			print '%s [%d procedures]' % (fn, len(my_procedures))
-			for procedure in my_procedures:
-				print '    %s' % procedure
-		if showZero or my_views:
-			print '%s [%d views]' % (fn, len(my_views))
-			for view in my_views:
-				print '    %s' % view
-	else:
-		table_count = len(file_tables)
-		if showZero or table_count > 0:
-			print '%s [%d suspects]' % (fn, table_count)
-			for table in file_tables:
-				print '    %s' % table
-	return
+                for table in file_tables:
+                        if table in tables:
+                                my_tables.append (table)
+                        elif table in views:
+                                my_views.append (table)
+                        elif table in procedures:
+                                my_procedures.append (table)
+                my_tables.sort()
+                my_views.sort()
+                my_procedures.sort()
+                if showZero or my_tables:
+                        print('%s [%d tables]' % (fn, len(my_tables)))
+                        for table in my_tables:
+                                print('    %s' % table)
+                if showZero or my_procedures:
+                        print('%s [%d procedures]' % (fn, len(my_procedures)))
+                        for procedure in my_procedures:
+                                print('    %s' % procedure)
+                if showZero or my_views:
+                        print('%s [%d views]' % (fn, len(my_views)))
+                        for view in my_views:
+                                print('    %s' % view)
+        else:
+                table_count = len(file_tables)
+                if showZero or table_count > 0:
+                        print('%s [%d suspects]' % (fn, table_count))
+                        for table in file_tables:
+                                print('    %s' % table)
+        return
 
 def main():
-	handleParms()
-	if not files:
-		readStdin()
-	if confirm:
-		loadTablesViews()
-	for file in files:
-		doFile (file)
-	return
+        handleParms()
+        if not files:
+                readStdin()
+        if confirm:
+                loadTablesViews()
+        for file in files:
+                doFile (file)
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

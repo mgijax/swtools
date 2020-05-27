@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # accepts a list of files on the command line, then goes through each.  For
 # each line ending in an integer, we append to that line the marker symbol
@@ -10,36 +10,36 @@ import string
 import regex
 import sys
 
-re = regex.compile ('\([0-9]+\)$')	# find integer at end of line
+re = regex.compile ('\([0-9]+\)$')      # find integer at end of line
 
 db.set_sqlLogin ('mgd_public', 'mgdpub', 'PROD_MGI', 'mgd')
 
 symbols = {}
 
 results = db.sql ('''select _Marker_key, symbol
-		from MRK_Marker
-		where _Organism_key = 1''', 'auto')
+                from MRK_Marker
+                where _Organism_key = 1''', 'auto')
 for row in results:
-	symbols[str(row['_Marker_key'])] = row['symbol']
+        symbols[str(row['_Marker_key'])] = row['symbol']
 sys.stderr.write ('Downloaded symbols...\n')
 
 for file in sys.argv[1:]:
-	sys.stderr.write ('Fixing %s...\n' % file)
+        sys.stderr.write ('Fixing %s...\n' % file)
 
-	fp = open (file, 'r')
-	lines = fp.readlines()
-	fp.close()
+        fp = open (file, 'r')
+        lines = fp.readlines()
+        fp.close()
 
-	i = 0
-	while i < len(lines):
-		if re.search(lines[i]) != -1:
-			key = re.group(1)
-			if symbols.has_key (key):
-				lines[i] = lines[i][:-1] + \
-					' [%s]\n' % symbols[key]
-		i = i + 1
+        i = 0
+        while i < len(lines):
+                if re.search(lines[i]) != -1:
+                        key = re.group(1)
+                        if key in symbols:
+                                lines[i] = lines[i][:-1] + \
+                                        ' [%s]\n' % symbols[key]
+                i = i + 1
 
-	fp = open (file, 'w')
-	for line in lines:
-		fp.write (line)
-	fp.close()
+        fp = open (file, 'w')
+        for line in lines:
+                fp.write (line)
+        fp.close()

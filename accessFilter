@@ -1,7 +1,7 @@
-#!/usr/local/bin/python
+#!./python
 
 # is: a filter through which Apache access.log records can be piped to filter
-# 	out various categories of records (sending others out to stdout)
+#       out various categories of records (sending others out to stdout)
 
 import subprocess
 import pickle
@@ -14,50 +14,50 @@ import os
 import socket
 
 USAGE = '''Usage: %s [-r|-s|-i|-j|-C|-m|-g|-v|-b <date>|-a <date>] [-f <filename>] [-o <filename>] [-w <int>] [-F <string>] [-R <string>] [-d][-c][-x]
-	Serves as a filter for Apache access logs.  Can be used to strip out
-	various types of requests, based on command-line flags.
+        Serves as a filter for Apache access logs.  Can be used to strip out
+        various types of requests, based on command-line flags.
 
     Filtering options:
-	-r : exclude hits from robots
-	-s : exclude hits from Perl/Python/Java/etc. scripts
-	-i : exclude requests for JPG or GIF images
-	-j : exclude requests for Javascript files
-	-C : exclude requests for CSS files
-	-t : exclude requests for counts (totalCount / gxdLitCount)
-	-m : exclude hits from MGI machines
-	-g : exclude hits for GXD pages (often would use this with -v)
-	-v : reverse processing (include only those specified, not exclude)
-	-b : exclude hits before a given date (mm/dd/yyyy format)
-	-a : exclude hits after a given date (mm/dd/yyyy format)
-	-F : include only requests containing the given string in the URL
-	-R : include only requests containing the given string in the referrer
+        -r : exclude hits from robots
+        -s : exclude hits from Perl/Python/Java/etc. scripts
+        -i : exclude requests for JPG or GIF images
+        -j : exclude requests for Javascript files
+        -C : exclude requests for CSS files
+        -t : exclude requests for counts (totalCount / gxdLitCount)
+        -m : exclude hits from MGI machines
+        -g : exclude hits for GXD pages (often would use this with -v)
+        -v : reverse processing (include only those specified, not exclude)
+        -b : exclude hits before a given date (mm/dd/yyyy format)
+        -a : exclude hits after a given date (mm/dd/yyyy format)
+        -F : include only requests containing the given string in the URL
+        -R : include only requests containing the given string in the referrer
     File-handling options:
-	-f : specify an input file from which to read (default is stdin)
-	-o : specify an output file to which to write (default is stdout)
+        -f : specify an input file from which to read (default is stdin)
+        -o : specify an output file to which to write (default is stdout)
     Processing options:
-    	-w : number of filtering subprocesses use (default is 1; 1-12 allowed)
-	-d : debug mode (write debugging info to stderr)
-	-c : use no-cache mode (resolve all IP addresses without using cache)
-	-n : do not resolve any IP addresses; assume it's already done
+        -w : number of filtering subprocesses use (default is 1; 1-12 allowed)
+        -d : debug mode (write debugging info to stderr)
+        -c : use no-cache mode (resolve all IP addresses without using cache)
+        -n : do not resolve any IP addresses; assume it's already done
     Internal options:
-    	-x : for internal use only; set up as subprocess for parallelization
+        -x : for internal use only; set up as subprocess for parallelization
     Notes:
-    	1. You must use at least one of -r, -s, -i, -m, -g, -b, and -a.
-	2. The -a and -b options do not exclude hits from the specified date.
-	3. If you use -a and -b with the same date, you will include only the
-	   hits from that specific date.
-	4. The -v option will include only those records which would have
-	   otherwise been excluded by one or more of the specified criteria.
-	   (You will get the set of all those which would be excluded without
-	   the -v option.)
-	5. The default mode starts four subprocesses for filtering.  This is
-	   the sweet-spot that showed up during testing, showing a 10-84%%
-	   performance improvement over the prior multi-threaded version
-	   (depending on the data set).  From 1-12 subprocesses is allowed.
-	6. To aid performance, this script uses a temp file in /tmp to track
-	   which IP addresses are flagged as being from robots (or not).  Each
-	   value is cached for up to a week.  Use -c to avoid this cache and
-	   recompute each (and resolve the address for each where needed).
+        1. You must use at least one of -r, -s, -i, -m, -g, -b, and -a.
+        2. The -a and -b options do not exclude hits from the specified date.
+        3. If you use -a and -b with the same date, you will include only the
+           hits from that specific date.
+        4. The -v option will include only those records which would have
+           otherwise been excluded by one or more of the specified criteria.
+           (You will get the set of all those which would be excluded without
+           the -v option.)
+        5. The default mode starts four subprocesses for filtering.  This is
+           the sweet-spot that showed up during testing, showing a 10-84%%
+           performance improvement over the prior multi-threaded version
+           (depending on the data set).  From 1-12 subprocesses is allowed.
+        6. To aid performance, this script uses a temp file in /tmp to track
+           which IP addresses are flagged as being from robots (or not).  Each
+           value is cached for up to a week.  Use -c to avoid this cache and
+           recompute each (and resolve the address for each where needed).
 ''' % sys.argv[0]
 
 INFILE = sys.stdin
@@ -65,7 +65,7 @@ OUTFILE = sys.stdout
 
 START_TIME = time.time()
 
-ROBOTS = False		# boolean flags for which records to exclude
+ROBOTS = False          # boolean flags for which records to exclude
 SCRIPTS = False
 IMAGES = False
 JAVASCRIPT = False
@@ -88,7 +88,7 @@ URL_STR = None
 REVERSE = False
 
 ROBOT_TAGS = [ 'bot', 'jeeves', 'inktomi', 'crawl', 'webcapture', 'webcopier',
-	'slurp', 'spider', 'httrack', 'httpclient' ]
+        'slurp', 'spider', 'httrack', 'httpclient' ]
 SCRIPT_TAGS = [ 'python', 'perl', 'java', 'mfc' ]
 
 # mm/dd/yyyy dates from user
@@ -98,161 +98,161 @@ USER_RE = re.compile ('([0-9]{2})/([0-9]{2})/([0-9]{4})')
 LOG_RE = re.compile ('([0-9]{2})/([A-Z][a-z]{2})/([0-9]{4})')
 
 def debug (s):
-	if DEBUG:
-		sys.stderr.write ('%8.3f : %s\n' % (time.time() - START_TIME,
-			s) )
-	return
+        if DEBUG:
+                sys.stderr.write ('%8.3f : %s\n' % (time.time() - START_TIME,
+                        s) )
+        return
 
 def bailout (s):
-	sys.stderr.write (USAGE + '\n')
-	if s:
-		sys.stderr.write ('Error: %s\n' % s)
-	sys.exit(1)
+        sys.stderr.write (USAGE + '\n')
+        if s:
+                sys.stderr.write ('Error: %s\n' % s)
+        sys.exit(1)
 
 abbrevToStr = {
-	'Jan' : '01',
-	'Feb' : '02',
-	'Mar' : '03',
-	'Apr' : '04',
-	'May' : '05',
-	'Jun' : '06',
-	'Jul' : '07',
-	'Aug' : '08',
-	'Sep' : '09',
-	'Oct' : '10',
-	'Nov' : '11',
-	'Dec' : '12',
-	}
+        'Jan' : '01',
+        'Feb' : '02',
+        'Mar' : '03',
+        'Apr' : '04',
+        'May' : '05',
+        'Jun' : '06',
+        'Jul' : '07',
+        'Aug' : '08',
+        'Sep' : '09',
+        'Oct' : '10',
+        'Nov' : '11',
+        'Dec' : '12',
+        }
 
 def logDate (s):
-	global LOG_RE
+        global LOG_RE
 
-	match = LOG_RE.search (s)
-	if not match:
-		bailout ('Invalid dd/mmm/yyyy date string: %s' % s)
+        match = LOG_RE.search (s)
+        if not match:
+                bailout ('Invalid dd/mmm/yyyy date string: %s' % s)
 
-	year = match.group(3)
-	month = match.group(2)
-	day = match.group(1)
+        year = match.group(3)
+        month = match.group(2)
+        day = match.group(1)
 
-	if not abbrevToStr.has_key(month):
-		bailout ('Invalid month (%s) in date string: %s' % (month, s))
+        if month not in abbrevToStr:
+                bailout ('Invalid month (%s) in date string: %s' % (month, s))
 
-	return year + abbrevToStr[month] + day
+        return year + abbrevToStr[month] + day
 
 def userDate (s):
-	global USER_RE
+        global USER_RE
 
-	match = USER_RE.search (s)
-	if not match:
-		bailout ('Invalid mm/dd/yyyy date string: %s' % s)
+        match = USER_RE.search (s)
+        if not match:
+                bailout ('Invalid mm/dd/yyyy date string: %s' % s)
 
-	year = match.group(3)
-	month = match.group(1)
-	day = match.group(2)
+        year = match.group(3)
+        month = match.group(1)
+        day = match.group(2)
 
-	return year + month + day
+        return year + month + day
 
 def processCommandLine():
-	global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
-	global AFTER_DATE, BEFORE_DATE, THREAD_COUNT, DEBUG, NO_CACHE
-	global JAVASCRIPT, CSS, SUBPROCESS, COUNTS
-	global REFER_STR, URL_STR, RESOLVE
+        global INFILE, OUTFILE, ROBOTS, SCRIPTS, IMAGES, MGI, REVERSE, GXD
+        global AFTER_DATE, BEFORE_DATE, THREAD_COUNT, DEBUG, NO_CACHE
+        global JAVASCRIPT, CSS, SUBPROCESS, COUNTS
+        global REFER_STR, URL_STR, RESOLVE
 
-	try:
-		options, args = getopt.getopt (sys.argv[1:],
-			'rsimgtvxf:o:a:b:w:dcjCF:R:n')
-	except getopt.GetoptError:
-		bailout ('Invalid command-line flag(s)')
+        try:
+                options, args = getopt.getopt (sys.argv[1:],
+                        'rsimgtvxf:o:a:b:w:dcjCF:R:n')
+        except getopt.GetoptError:
+                bailout ('Invalid command-line flag(s)')
 
-	if len(args) > 0:
-		bailout ('No extra arguments are allowed')
+        if len(args) > 0:
+                bailout ('No extra arguments are allowed')
 
-	for (option, value) in options:
-		if option == '-r':
-			ROBOTS = True
-		elif option == '-s':
-			SCRIPTS = True
-		elif option == '-x':
-			SUBPROCESS = True
-		elif option == '-i':
-			IMAGES = True
-		elif option == '-m':
-			MGI = True
-		elif option == '-t':
-			COUNTS = True
-		elif option == '-v':
-			REVERSE = True
-		elif option == '-f':
-			try:
-				INFILE = open (value, 'r')
-			except:
-				bailout ('Cannot read from: %s' % value)
-		elif option == '-o':
-			try:
-				OUTFILE = open (value, 'w')
-			except:
-				bailout ('Cannot write to: %s' % value)
-		elif option == '-a':
-			AFTER_DATE = userDate (value)
-		elif option == '-b':
-			BEFORE_DATE = userDate (value)
-		elif option == '-j':
-			JAVASCRIPT = True
-		elif option == '-C':
-			CSS = True
-		elif option == '-g':
-			GXD = True
-		elif option == '-w':
-			THREAD_COUNT = int(value)
-			if THREAD_COUNT < 1 or THREAD_COUNT > 12:
-				bailout ('Subprocess count (-w) must be ' + \
-					'from 1 to 12')
-		elif option == '-d':
-			DEBUG = True
-		elif option == '-c':
-			NO_CACHE = True
-		elif option == '-R':
-			REFER_STR = value
-		elif option == '-F':
-			URL_STR = value
-		elif option == '-n':
-			RESOLVE = False
+        for (option, value) in options:
+                if option == '-r':
+                        ROBOTS = True
+                elif option == '-s':
+                        SCRIPTS = True
+                elif option == '-x':
+                        SUBPROCESS = True
+                elif option == '-i':
+                        IMAGES = True
+                elif option == '-m':
+                        MGI = True
+                elif option == '-t':
+                        COUNTS = True
+                elif option == '-v':
+                        REVERSE = True
+                elif option == '-f':
+                        try:
+                                INFILE = open (value, 'r')
+                        except:
+                                bailout ('Cannot read from: %s' % value)
+                elif option == '-o':
+                        try:
+                                OUTFILE = open (value, 'w')
+                        except:
+                                bailout ('Cannot write to: %s' % value)
+                elif option == '-a':
+                        AFTER_DATE = userDate (value)
+                elif option == '-b':
+                        BEFORE_DATE = userDate (value)
+                elif option == '-j':
+                        JAVASCRIPT = True
+                elif option == '-C':
+                        CSS = True
+                elif option == '-g':
+                        GXD = True
+                elif option == '-w':
+                        THREAD_COUNT = int(value)
+                        if THREAD_COUNT < 1 or THREAD_COUNT > 12:
+                                bailout ('Subprocess count (-w) must be ' + \
+                                        'from 1 to 12')
+                elif option == '-d':
+                        DEBUG = True
+                elif option == '-c':
+                        NO_CACHE = True
+                elif option == '-R':
+                        REFER_STR = value
+                elif option == '-F':
+                        URL_STR = value
+                elif option == '-n':
+                        RESOLVE = False
 
-	if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
-			BEFORE_DATE or AFTER_DATE or JAVASCRIPT or CSS or \
-			REFER_STR or URL_STR or COUNTS):
-		bailout ('Must use at least one of -r, -s, -i, -j, ' + \
-			'-C, -t, -m, -g, -a, -b, -R, or -F')
-	return
+        if not (ROBOTS or SCRIPTS or MGI or IMAGES or GXD or \
+                        BEFORE_DATE or AFTER_DATE or JAVASCRIPT or CSS or \
+                        REFER_STR or URL_STR or COUNTS):
+                bailout ('Must use at least one of -r, -s, -i, -j, ' + \
+                        '-C, -t, -m, -g, -a, -b, -R, or -F')
+        return
 
 def closeFiles():
-	global OUTFILE, INFILE
+        global OUTFILE, INFILE
 
-	if OUTFILE != sys.stdout:
-		OUTFILE.close()
-	if INFILE != sys.stdin:
-		INFILE.close()
-	return
+        if OUTFILE != sys.stdout:
+                OUTFILE.close()
+        if INFILE != sys.stdin:
+                INFILE.close()
+        return
 
 def isMgi (ip):
-	if ip.startswith('209.222.209'):
-	    	return True
-	if ip.endswith('informatics.jax.org'):
-		return True
-	if ip.find('.') == -1:
-		return True
-	return False
+        if ip.startswith('209.222.209'):
+                return True
+        if ip.endswith('informatics.jax.org'):
+                return True
+        if ip.find('.') == -1:
+                return True
+        return False
 
 def isImage (uriLower):
-	for suffix in [ '.gif', '.jpg', '.jpeg', '.ico' ]:
-		if uriLower.endswith(suffix):
-			return True
+        for suffix in [ '.gif', '.jpg', '.jpeg', '.ico' ]:
+                if uriLower.endswith(suffix):
+                        return True
 
-	if uriLower.find ('string_image.cgi') != -1:
-		return True
+        if uriLower.find ('string_image.cgi') != -1:
+                return True
 
-	return False
+        return False
 
 ROBOT_IP = {}
 ROBOT_TIMESTAMP = {}
@@ -265,401 +265,401 @@ NEW_ROBOTS = []
 BOT_REPORTS = {}
 
 def isRobot (ip, agentLower):
-	global ROBOT_IP, NUMERIC_RE, NAME_RE, ROBOT_TIMESTAMP, ROBOT_AGENT
-	global NEW_ROBOTS
+        global ROBOT_IP, NUMERIC_RE, NAME_RE, ROBOT_TIMESTAMP, ROBOT_AGENT
+        global NEW_ROBOTS
 
-	if ROBOT_IP.has_key(ip):
-		# if we know this is a robot based on IP address, just report
-		# it.  if the IP hasn't flagged it as a robot, then we need to
-		# check the user agent.  (the same computer may use a browser
-		# sometimes and use robot/scripting sometimes)
+        if ip in ROBOT_IP:
+                # if we know this is a robot based on IP address, just report
+                # it.  if the IP hasn't flagged it as a robot, then we need to
+                # check the user agent.  (the same computer may use a browser
+                # sometimes and use robot/scripting sometimes)
 
-		if ROBOT_IP[ip] == True:
-			return True
-	else:
-		address = ip
+                if ROBOT_IP[ip] == True:
+                        return True
+        else:
+                address = ip
 
-		# if is numeric address, we need to resolve to name 
-		# (if possible)
+                # if is numeric address, we need to resolve to name 
+                # (if possible)
 
-		if RESOLVE and NUMERIC_RE.match(ip):
-			address = socket.getfqdn(ip)
+                if RESOLVE and NUMERIC_RE.match(ip):
+                        address = socket.getfqdn(ip)
 
-		for tag in ROBOT_TAGS:
-			if address.find (tag) != -1:
-				ROBOT_IP[ip] = True
-				ROBOT_TIMESTAMP[ip] = time.time()
-				NEW_ROBOTS.append ( (ip, 1) )
-				return True
+                for tag in ROBOT_TAGS:
+                        if address.find (tag) != -1:
+                                ROBOT_IP[ip] = True
+                                ROBOT_TIMESTAMP[ip] = time.time()
+                                NEW_ROBOTS.append ( (ip, 1) )
+                                return True
 
-		ROBOT_IP[ip] = False
-		ROBOT_TIMESTAMP[ip] = time.time()
-		NEW_ROBOTS.append ( (ip, 0) )
+                ROBOT_IP[ip] = False
+                ROBOT_TIMESTAMP[ip] = time.time()
+                NEW_ROBOTS.append ( (ip, 0) )
 
-	# check user agent
+        # check user agent
 
-	if ROBOT_AGENT.has_key(agentLower):
-		return ROBOT_AGENT[agentLower]
+        if agentLower in ROBOT_AGENT:
+                return ROBOT_AGENT[agentLower]
 
-	for tag in ROBOT_TAGS:
-		if agentLower.find (tag) != -1:
-			ROBOT_AGENT[agentLower] = True
-			return True
+        for tag in ROBOT_TAGS:
+                if agentLower.find (tag) != -1:
+                        ROBOT_AGENT[agentLower] = True
+                        return True
 
-	ROBOT_AGENT[agentLower] = False
-	return False
+        ROBOT_AGENT[agentLower] = False
+        return False
 
 def isScript (agentLower):
-	global SCRIPT_AGENT
+        global SCRIPT_AGENT
 
-	if SCRIPT_AGENT.has_key(agentLower):
-		return SCRIPT_AGENT[agentLower]
+        if agentLower in SCRIPT_AGENT:
+                return SCRIPT_AGENT[agentLower]
 
-	for tag in SCRIPT_TAGS:
-		if agentLower.find (tag) != -1:
-			SCRIPT_AGENT[agentLower] = True
-			return True
+        for tag in SCRIPT_TAGS:
+                if agentLower.find (tag) != -1:
+                        SCRIPT_AGENT[agentLower] = True
+                        return True
 
-	SCRIPT_AGENT[agentLower] = False
-	return False
+        SCRIPT_AGENT[agentLower] = False
+        return False
 
 def includeDate (dateTime):
-	dateStr = logDate(dateTime)
-	if AFTER_DATE and dateStr > AFTER_DATE:
-		return False
-	if BEFORE_DATE and dateStr < BEFORE_DATE:
-		return False
-	return True 
+        dateStr = logDate(dateTime)
+        if AFTER_DATE and dateStr > AFTER_DATE:
+                return False
+        if BEFORE_DATE and dateStr < BEFORE_DATE:
+                return False
+        return True 
 
 # strings which identify GXD pages
 GXD_TAGS = [ 'expression', 'gxdindex', 'estclone', 'anatdict', 'AMA', 'GEN',
-	'markerTissues', 'antibody', 'antigen', '/image.cgi', 'exptools',
-	'GXD', 'gxd_tissue_report', 'imageSummaryByMrk', 'ADRefiner',
-	'cDNAQF', '/gxd'
-	]
+        'markerTissues', 'antibody', 'antigen', '/image.cgi', 'exptools',
+        'GXD', 'gxd_tissue_report', 'imageSummaryByMrk', 'ADRefiner',
+        'cDNAQF', '/gxd'
+        ]
 
 def isGxd (uri):
-	for tag in GXD_TAGS:
-		if uri.find (tag) != -1:
-			return True
-	return False
+        for tag in GXD_TAGS:
+                if uri.find (tag) != -1:
+                        return True
+        return False
 
 def keepLine (line):
-	output = True
+        output = True
 
-	fields = line.strip().split(' ')
-	numFields = len(fields)
+        fields = line.strip().split(' ')
+        numFields = len(fields)
 
-	if ROBOTS or SCRIPTS:
-		if numFields >= 12:
-			# the agent field is enclosed in quotes and may
-			# include spaces, so just put back together everything
-			# after field 11; it will be close enough
+        if ROBOTS or SCRIPTS:
+                if numFields >= 12:
+                        # the agent field is enclosed in quotes and may
+                        # include spaces, so just put back together everything
+                        # after field 11; it will be close enough
 
-			agent = ' '.join(fields[11:]).lower()
-			if ROBOTS and isRobot(fields[0], agent):
-				output = False
-			elif SCRIPTS and isScript(agent):
-				output = False
-		else:
-			# no agent field, but we can still check the IP
-			if ROBOTS and isRobot(fields[0], ''):
-				output = False
+                        agent = ' '.join(fields[11:]).lower()
+                        if ROBOTS and isRobot(fields[0], agent):
+                                output = False
+                        elif SCRIPTS and isScript(agent):
+                                output = False
+                else:
+                        # no agent field, but we can still check the IP
+                        if ROBOTS and isRobot(fields[0], ''):
+                                output = False
 
-	if output and JAVASCRIPT:
-		if numFields >= 7:
-			if fields[6][-3:] == '.js':
-				output = False
+        if output and JAVASCRIPT:
+                if numFields >= 7:
+                        if fields[6][-3:] == '.js':
+                                output = False
 
-	if output and CSS:
-		if numFields >= 7:
-			if fields[6][-4:] == '.css':
-				output = False
+        if output and CSS:
+                if numFields >= 7:
+                        if fields[6][-4:] == '.css':
+                                output = False
 
-	if output and URL_STR:
-		if numFields >= 7:
-			if fields[6].find(URL_STR) == -1:
-				output = False
+        if output and URL_STR:
+                if numFields >= 7:
+                        if fields[6].find(URL_STR) == -1:
+                                output = False
 
-	if output and REFER_STR:
-		if numFields >= 11:
-			if fields[10].find(REFER_STR) == -1:
-				output = False
-		else:
-			output = False
+        if output and REFER_STR:
+                if numFields >= 11:
+                        if fields[10].find(REFER_STR) == -1:
+                                output = False
+                else:
+                        output = False
 
-	if output and MGI:
-		if numFields >= 1:
-			if isMgi(fields[0]):
-				output = False
-	if output and IMAGES:
-		if numFields >= 7:
-			if isImage(fields[6].lower()):
-				output = False
+        if output and MGI:
+                if numFields >= 1:
+                        if isMgi(fields[0]):
+                                output = False
+        if output and IMAGES:
+                if numFields >= 7:
+                        if isImage(fields[6].lower()):
+                                output = False
 
-	if output and GXD:
-		if numFields >= 7:
-			if isGxd(fields[6]):
-				output = False
+        if output and GXD:
+                if numFields >= 7:
+                        if isGxd(fields[6]):
+                                output = False
 
-	if output and COUNTS:
-		if numFields >= 7:
-			if (fields[6].find('/totalCount') >= 0) or \
-				(fields[6].find('/gxdLitCount') >= 0):
-					output = False
+        if output and COUNTS:
+                if numFields >= 7:
+                        if (fields[6].find('/totalCount') >= 0) or \
+                                (fields[6].find('/gxdLitCount') >= 0):
+                                        output = False
 
-	if output and (BEFORE_DATE or AFTER_DATE):
-		if numFields >= 4:
-			output = includeDate(fields[3])
+        if output and (BEFORE_DATE or AFTER_DATE):
+                if numFields >= 4:
+                        output = includeDate(fields[3])
 
-	if REVERSE:
-		output = not output
-	return output
+        if REVERSE:
+                output = not output
+        return output
 
 QUIT = '*quit*'
 REPORT = '*report*'
 
 def write (outQueue):
-	global NEW_ROBOTS
-	done = False
+        global NEW_ROBOTS
+        done = False
 
-	for (ip, flag) in NEW_ROBOTS:
-		OUTFILE.write ('*%s %s*\n' % (ip, flag))
+        for (ip, flag) in NEW_ROBOTS:
+                OUTFILE.write ('*%s %s*\n' % (ip, flag))
 
-	NEW_ROBOTS = []
-	OUTFILE.flush()
+        NEW_ROBOTS = []
+        OUTFILE.flush()
 
-	for line in outQueue:
-		OUTFILE.write(line)
-		OUTFILE.write ('\n')
-	OUTFILE.flush()
-	return
+        for line in outQueue:
+                OUTFILE.write(line)
+                OUTFILE.write ('\n')
+        OUTFILE.flush()
+        return
 
 def subprocFilter():
-	outQueue = []
+        outQueue = []
 
-	OUTFILE.write(REPORT + '\n')
-	OUTFILE.flush()
+        OUTFILE.write(REPORT + '\n')
+        OUTFILE.flush()
 
-	line = INFILE.readline().rstrip()
-	while line:
-		if (line[0] != '*') or (line[-1] != '*'):
-			if keepLine(line):
-				outQueue.append (line)
-		elif line.startswith(QUIT):
-			return
-		elif line.startswith(REPORT):
-			outQueue.append (REPORT)
-			write (outQueue)
-			outQueue = []
-		else:
-			items = line[1:-1].split(' ')
-			ip = items[0]
-			code = (items[1] == '1')
+        line = INFILE.readline().rstrip()
+        while line:
+                if (line[0] != '*') or (line[-1] != '*'):
+                        if keepLine(line):
+                                outQueue.append (line)
+                elif line.startswith(QUIT):
+                        return
+                elif line.startswith(REPORT):
+                        outQueue.append (REPORT)
+                        write (outQueue)
+                        outQueue = []
+                else:
+                        items = line[1:-1].split(' ')
+                        ip = items[0]
+                        code = (items[1] == '1')
 
-			if not ROBOT_IP.has_key(ip):
-				ROBOT_IP[ip] = code
-				ROBOT_TIMESTAMP[ip] = time.time()
+                        if ip not in ROBOT_IP:
+                                ROBOT_IP[ip] = code
+                                ROBOT_TIMESTAMP[ip] = time.time()
 
-		line = INFILE.readline().rstrip()
-	return
+                line = INFILE.readline().rstrip()
+        return
 
 def addWorker (processes):
-	skipnext = False
-	subargs = []
-	for item in sys.argv:
-		if item in ('-f', '-o'):
-			skipnext = True
-		elif skipnext:
-			skipnext = False
-		else:
-			subargs.append (item)
+        skipnext = False
+        subargs = []
+        for item in sys.argv:
+                if item in ('-f', '-o'):
+                        skipnext = True
+                elif skipnext:
+                        skipnext = False
+                else:
+                        subargs.append (item)
 
-	proc = subprocess.Popen (subargs + ['-x'],
-		stdin=subprocess.PIPE,
-		stdout=subprocess.PIPE)
-	processes.append (proc)
-	return proc
+        proc = subprocess.Popen (subargs + ['-x'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE)
+        processes.append (proc)
+        return proc
 
 def subprocIO (buckets, processes, procRange):
-	# gather any existing results, then send out the new buckets
+        # gather any existing results, then send out the new buckets
 
-	global OUTFILE, ROBOT_IP, ROBOT_TIMESTAMP, BOT_REPORTS
+        global OUTFILE, ROBOT_IP, ROBOT_TIMESTAMP, BOT_REPORTS
 
-	debug ('send buckets: %s' % str(map(len,buckets)))
+        debug ('send buckets: %s' % str(list(map(len,buckets))))
 
-	for i in procRange:
-		# collect a new set of isRobot flags from this process
-		BOT_REPORTS[i] = []
+        for i in procRange:
+                # collect a new set of isRobot flags from this process
+                BOT_REPORTS[i] = []
 
-		process = processes[i]
+                process = processes[i]
 
-		# get output from previous run
-		line = process.stdout.readline()
+                # get output from previous run
+                line = process.stdout.readline()
 
-		ct = 0
+                ct = 0
 
-		# continue until we reach the REPORT termination flag
-		while not line.startswith(REPORT):
+                # continue until we reach the REPORT termination flag
+                while not line.startswith(REPORT):
 
-			# regular log lines get written out
-			if (line[0] != '*'):
-				OUTFILE.write(line)
-				ct = ct + 1
+                        # regular log lines get written out
+                        if (line[0] != '*'):
+                                OUTFILE.write(line)
+                                ct = ct + 1
 
-			# is-robot flag lines get parsed and remembered
-			else:
-				items = line[1:-2].split(' ')
-				ip = items[0]
-				code = (items[1] == '1')
+                        # is-robot flag lines get parsed and remembered
+                        else:
+                                items = line[1:-2].split(' ')
+                                ip = items[0]
+                                code = (items[1] == '1')
 
-				ROBOT_IP[ip] = code
-				ROBOT_TIMESTAMP[ip] = time.time()
-				BOT_REPORTS[i].append ( (ip, items[1]) )
+                                ROBOT_IP[ip] = code
+                                ROBOT_TIMESTAMP[ip] = time.time()
+                                BOT_REPORTS[i].append ( (ip, items[1]) )
 
-			line = process.stdout.readline()
+                        line = process.stdout.readline()
 
-		debug ('proc %d sent %d lines, %d bot flags' % \
-			(i, ct, len(BOT_REPORTS[i]) ))
-		OUTFILE.flush()
+                debug ('proc %d sent %d lines, %d bot flags' % \
+                        (i, ct, len(BOT_REPORTS[i]) ))
+                OUTFILE.flush()
 
-		# send input to subprocesses
+                # send input to subprocesses
 
-		# if more lines waiting in bucket, send next set of inputs
-		if buckets[i]:
+                # if more lines waiting in bucket, send next set of inputs
+                if buckets[i]:
 
-			# send along is-robot flags we collected last round
-			for (procid, robots) in BOT_REPORTS.items():
-				if procid == i:
-					continue
-				for (ip, flag) in robots:
-					process.stdin.write ('*%s %s*\n' % (
-						ip, flag))
-				process.stdin.flush()
+                        # send along is-robot flags we collected last round
+                        for (procid, robots) in list(BOT_REPORTS.items()):
+                                if procid == i:
+                                        continue
+                                for (ip, flag) in robots:
+                                        process.stdin.write ('*%s %s*\n' % (
+                                                ip, flag))
+                                process.stdin.flush()
 
-			# send new log records
-			for line in buckets[i]:
-				process.stdin.write (line)
-			process.stdin.flush()
+                        # send new log records
+                        for line in buckets[i]:
+                                process.stdin.write (line)
+                        process.stdin.flush()
 
-		# send flag requesting a report for those records
-		process.stdin.write (REPORT + '\n')
-		process.stdin.flush()
+                # send flag requesting a report for those records
+                process.stdin.write (REPORT + '\n')
+                process.stdin.flush()
 
-		# reset this bucket
-		buckets[i] = []
-		debug ('sent lines to proc %d' % i)
-	return
+                # reset this bucket
+                buckets[i] = []
+                debug ('sent lines to proc %d' % i)
+        return
 
 def filter(procCount = 5):
-	global INFILE 
+        global INFILE 
 
-	procRange = range(0, procCount)
-	processes = []
-	buckets = []
+        procRange = list(range(0, procCount))
+        processes = []
+        buckets = []
 
-	for i in procRange:
-		addWorker(processes)
-		buckets.append ([])
+        for i in procRange:
+                addWorker(processes)
+                buckets.append ([])
 
-	ct = 0
-	i = 0
-	cacheSize = 1000
-	bucketSize = cacheSize / procCount
-	maxBucket = procCount - 1
+        ct = 0
+        i = 0
+        cacheSize = 1000
+        bucketSize = cacheSize / procCount
+        maxBucket = procCount - 1
 
-	line = INFILE.readline()
-	while line:
-		pn = min(maxBucket, ct / bucketSize)
-		buckets[pn].append (line)
+        line = INFILE.readline()
+        while line:
+                pn = min(maxBucket, ct / bucketSize)
+                buckets[pn].append (line)
 
-		i = i + 1
-		ct = ct + 1
-		if ct >= cacheSize:
-			subprocIO (buckets, processes, procRange)
-			ct = 0
-			debug ('total lines sent: %d' % i)
+                i = i + 1
+                ct = ct + 1
+                if ct >= cacheSize:
+                        subprocIO (buckets, processes, procRange)
+                        ct = 0
+                        debug ('total lines sent: %d' % i)
 
-		line = INFILE.readline()
+                line = INFILE.readline()
 
-	debug ('finished reading data')
+        debug ('finished reading data')
 
-	if ct > 0:
-		# send final buckets
-		subprocIO (buckets, processes, procRange)
+        if ct > 0:
+                # send final buckets
+                subprocIO (buckets, processes, procRange)
 
-	# gather final results
-	subprocIO (buckets, processes, procRange)
-	
-	for process in processes:
-		process.stdin.write (QUIT + '\n')
-		process.stdin.flush()
-		process.stdin.close()
-		process.wait()
-		debug ('subprocess %d ended' % process.pid)
-	return
+        # gather final results
+        subprocIO (buckets, processes, procRange)
+        
+        for process in processes:
+                process.stdin.write (QUIT + '\n')
+                process.stdin.flush()
+                process.stdin.close()
+                process.wait()
+                debug ('subprocess %d ended' % process.pid)
+        return
 
 def loadCache (file):
-	global ROBOT_IP, ROBOT_TIMESTAMP
+        global ROBOT_IP, ROBOT_TIMESTAMP
 
-	if os.path.exists(file):
-		fp = open (file, 'r')
-		d = pickle.load (fp)
-		fp.close()
+        if os.path.exists(file):
+                fp = open (file, 'r')
+                d = pickle.load (fp)
+                fp.close()
 
-		ROBOT_IP = d['ip']
-		ROBOT_TIMESTAMP = d['timestamp']
+                ROBOT_IP = d['ip']
+                ROBOT_TIMESTAMP = d['timestamp']
 
-		debug ('loaded %d cached IP/robot values' % len(ROBOT_IP))
+                debug ('loaded %d cached IP/robot values' % len(ROBOT_IP))
 
-		now = time.time()
-		weekAgo = now - (60 * 60 * 24 * 7)
+                now = time.time()
+                weekAgo = now - (60 * 60 * 24 * 7)
 
-		items = ROBOT_TIMESTAMP.items()
-		for (ip, timestamp) in items:
-			if timestamp < weekAgo:
-				del ROBOT_IP[ip]
-				del ROBOT_TIMESTAMP[ip]
+                items = list(ROBOT_TIMESTAMP.items())
+                for (ip, timestamp) in items:
+                        if timestamp < weekAgo:
+                                del ROBOT_IP[ip]
+                                del ROBOT_TIMESTAMP[ip]
 
-		debug ('kept %d cached IP/robot values' % len(ROBOT_IP))
-	return
+                debug ('kept %d cached IP/robot values' % len(ROBOT_IP))
+        return
 
 def saveCache (file):
-	global ROBOT_IP, ROBOT_TIMESTAMP
+        global ROBOT_IP, ROBOT_TIMESTAMP
 
-	if not ROBOT_IP:
-		return
+        if not ROBOT_IP:
+                return
 
-	try:
-		dict = {
-			'ip'	    : ROBOT_IP,
-			'timestamp' : ROBOT_TIMESTAMP,
-			}
-		fp = open (file, 'w')
-		pickle.dump (dict, fp, 0)
-		fp.close()
-		runCommand.runCommand ('chmod 666 %s' % file)
+        try:
+                dict = {
+                        'ip'        : ROBOT_IP,
+                        'timestamp' : ROBOT_TIMESTAMP,
+                        }
+                fp = open (file, 'w')
+                pickle.dump (dict, fp, 0)
+                fp.close()
+                runCommand.runCommand ('chmod 666 %s' % file)
 
-		debug ('saved %d IP/robot values to cache' % len(ROBOT_IP))
-	except:
-		debug ('failed to write new IP/robot cache file')
-	return
+                debug ('saved %d IP/robot values to cache' % len(ROBOT_IP))
+        except:
+                debug ('failed to write new IP/robot cache file')
+        return
 
 def main():
-	robotCache = '/tmp/accessFilter.robots'
+        robotCache = '/tmp/accessFilter.robots'
 
-	processCommandLine()
-	if not NO_CACHE:
-		loadCache (robotCache)
+        processCommandLine()
+        if not NO_CACHE:
+                loadCache (robotCache)
 
-	if not SUBPROCESS:
-		filter(THREAD_COUNT)
-		closeFiles()
-		if not NO_CACHE:
-			saveCache (robotCache)
-		debug ('main process ended')
-	else:
-		subprocFilter()
+        if not SUBPROCESS:
+                list(filter(THREAD_COUNT))
+                closeFiles()
+                if not NO_CACHE:
+                        saveCache (robotCache)
+                debug ('main process ended')
+        else:
+                subprocFilter()
 
 if __name__ == '__main__':
-	main()
+        main()

@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import getopt
@@ -7,59 +7,59 @@ import string
 USAGE = '%s [-n <number to show>] [-f <filename to read>]' % sys.argv[0]
 
 def log (message):
-	print message
-	return
+        print(message)
+        return
 
 def bailout (message = USAGE):
-	log(message)
-	sys.exit(0)
+        log(message)
+        sys.exit(0)
 
 ###--- Main ---###
 
 try:
-	optlist, args = getopt.getopt (sys.argv[1:], 'n:f:')
+        optlist, args = getopt.getopt (sys.argv[1:], 'n:f:')
 except getopt.error:
-	bailout()
+        bailout()
 
 if len(args) > 0:
-	bailout()
+        bailout()
 
 fp = sys.stdin
 toShow = None
 
 for (option, value) in optlist:
-	if option == '-n':
-		try:
-			toShow = string.atoi (value)
-		except:
-			log ('-n must be followed by an integer')
-			bailout()
-	elif option == '-f':
-		try:
-			fp = open (value, 'r')
-		except:
-			log ('Cannot open file "%s"' % value)
-			bailout()
+        if option == '-n':
+                try:
+                        toShow = string.atoi (value)
+                except:
+                        log ('-n must be followed by an integer')
+                        bailout()
+        elif option == '-f':
+                try:
+                        fp = open (value, 'r')
+                except:
+                        log ('Cannot open file "%s"' % value)
+                        bailout()
 
 dict = {}
 line = fp.readline()[:-1]
 while line:
-	if not dict.has_key (line):
-		dict[line] = 0
-	dict[line] = dict[line] + 1
-	line = fp.readline()[:-1]
+        if line not in dict:
+                dict[line] = 0
+        dict[line] = dict[line] + 1
+        line = fp.readline()[:-1]
 
 list = []
-for k in dict.keys():
-	list.append ( (dict[k], k) )
+for k in list(dict.keys()):
+        list.append ( (dict[k], k) )
 list.sort()
 list.reverse()
 
 if toShow is not None:
-	list = list[:toShow]
+        list = list[:toShow]
 
 for (count, file) in list:
-	print '%6d  %s' % (count, file)
+        print('%6d  %s' % (count, file))
 
 if fp != sys.stdin:
-	fp.close()
+        fp.close()

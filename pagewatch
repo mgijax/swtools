@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 # watches a web page over time and displays changes as they occur
 
@@ -8,93 +8,93 @@ import time
 import getopt
 import string
 import regsub
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import tempfile
 
 USAGE = 'Usage: %s [<-t seconds between checks>] <url>\n' % sys.argv[0]
 
 def log (message):
-	sys.stderr.write (message + '\n')
-	return
+        sys.stderr.write (message + '\n')
+        return
 
 def bailout (message = USAGE):
-	log (message)
-	sys.exit(0)
+        log (message)
+        sys.exit(0)
 
 def processOptions ():
-	try:
-		optlist, args = getopt.getopt (sys.argv[1:], 't:')
-	except getopt.error:
-		bailout()
+        try:
+                optlist, args = getopt.getopt (sys.argv[1:], 't:')
+        except getopt.error:
+                bailout()
 
-	if len(args) != 1:
-		log ('Wrong number of arguments.')
-		bailout()
+        if len(args) != 1:
+                log ('Wrong number of arguments.')
+                bailout()
 
-	seconds = 120		# defaults
-	url = args[0]
+        seconds = 120           # defaults
+        url = args[0]
 
-	for (option, value) in optlist:
-		if option == '-t':
-			try:
-				seconds = string.atoi (value)
-			except:
-				log ('Error following -s must be an integer')
-				bailout()
-	return url, seconds
+        for (option, value) in optlist:
+                if option == '-t':
+                        try:
+                                seconds = string.atoi (value)
+                        except:
+                                log ('Error following -s must be an integer')
+                                bailout()
+        return url, seconds
 
 def stripHTML (s):
-	return regsub.gsub ('<[^>]+>', '', s)
+        return regsub.gsub ('<[^>]+>', '', s)
 
 def getFile (url, filename):
-	infp = urllib.urlopen (url)
-	lines = infp.readlines()
-	infp.close()
+        infp = urllib.request.urlopen (url)
+        lines = infp.readlines()
+        infp.close()
 
-	pastHeader = 0
+        pastHeader = 0
 
-	outfp = open (filename, 'w')
-	for line in lines:
-		if pastHeader:
-			outfp.write (string.strip (stripHTML(line)) + '\n')
-		elif string.strip(line) == '':
-			pastHeader = 1
-	outfp.close()
-	return
+        outfp = open (filename, 'w')
+        for line in lines:
+                if pastHeader:
+                        outfp.write (string.strip (stripHTML(line)) + '\n')
+                elif string.strip(line) == '':
+                        pastHeader = 1
+        outfp.close()
+        return
 
 def diff (file1, file2):
-	fp = os.popen ('diff %s %s' % (file1, file2))
-	lines = fp.readlines()
-	fp.close()
-	return lines
+        fp = os.popen ('diff %s %s' % (file1, file2))
+        lines = fp.readlines()
+        fp.close()
+        return lines
 
 def main ():
-	url, seconds = processOptions()
-	original = tempfile.mktemp()
-	updated = tempfile.mktemp()
+        url, seconds = processOptions()
+        original = tempfile.mktemp()
+        updated = tempfile.mktemp()
 
-	getFile(url, original)
-	try:
-		while 1:
-			getFile(url, updated)
-			lines = diff (original, updated)
-			if len(lines) > 0:
-				os.unlink (original)
-				os.rename (updated, original)
-				print ''
-				print time.strftime ('%m/%d/%y %H:%M', \
-					time.localtime (time.time()))
-				print
-				for line in lines:
-					print string.strip(line)
-				print '-' * 60
-			time.sleep (seconds)
-	except:
-		for file in [original, updated]:
-			if os.path.exists (file):
-				log ('Removing %s' % file)
-				os.unlink (file)
-	return
+        getFile(url, original)
+        try:
+                while 1:
+                        getFile(url, updated)
+                        lines = diff (original, updated)
+                        if len(lines) > 0:
+                                os.unlink (original)
+                                os.rename (updated, original)
+                                print('')
+                                print(time.strftime ('%m/%d/%y %H:%M', \
+                                        time.localtime (time.time())))
+                                print()
+                                for line in lines:
+                                        print(string.strip(line))
+                                print('-' * 60)
+                        time.sleep (seconds)
+        except:
+                for file in [original, updated]:
+                        if os.path.exists (file):
+                                log ('Removing %s' % file)
+                                os.unlink (file)
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

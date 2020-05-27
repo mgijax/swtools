@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import string
@@ -15,5 +15,5 @@ lines2 = fp.readlines()
 fp.close()
 
 for line in lines1:
-	if line in lines2:
-		print line,
+        if line in lines2:
+                print(line, end=' ')

@@ -1,8 +1,8 @@
-#!/usr/local/bin/python
+#!./python
 
 # Name: logTop
 # Purpose: to collect data on CPU and memory usage from 'top' on a Linux
-#	system, then write it out in a tab-delimited format
+#       system, then write it out in a tab-delimited format
 
 import getopt
 import time
@@ -13,449 +13,449 @@ import subprocess
 
 USAGE = '''Usage: %s [-s <seconds>][-d <minutes>]
     Options:
-	-s : number of seconds between checks (default is 3)
-	-d : number of minutes to run the test (default is 60)
+        -s : number of seconds between checks (default is 3)
+        -d : number of minutes to run the test (default is 60)
     Notes:
-	1. Results are written to stdout as they are measured.
-	2. Value for -s must be between 1 and 600 (ten minutes).
-	3. Value for -d must be between 1 and 3600 (one day).
+        1. Results are written to stdout as they are measured.
+        2. Value for -s must be between 1 and 600 (ten minutes).
+        3. Value for -d must be between 1 and 3600 (one day).
 ''' % sys.argv[0]
 
 OSTYPE = None
 DELAY = 3
 DURATION = 60
 TESTER = None
-TIME_WINDOW = 0.2	# window of time to allow for process management
+TIME_WINDOW = 0.2       # window of time to allow for process management
 
 def bailout (message, showUsage = False):
-	if showUsage:
-		sys.stderr.write (USAGE)
-	sys.stderr.write('Error: ' + message + '\n')
-	sys.exit(1)
+        if showUsage:
+                sys.stderr.write (USAGE)
+        sys.stderr.write('Error: ' + message + '\n')
+        sys.exit(1)
 
 def invoke (cmd, args):
-	proc = subprocess.Popen ( [cmd] + args, stdout = subprocess.PIPE,
-		stderr = subprocess.PIPE)
-	return proc
+        proc = subprocess.Popen ( [cmd] + args, stdout = subprocess.PIPE,
+                stderr = subprocess.PIPE)
+        return proc
 
 def determineOSType():
-	global OSTYPE, TESTER
+        global OSTYPE, TESTER
 
-	if os.environ.has_key('OSTYPE'):
-		OSTYPE = os.environ['OSTYPE'].split()[0]
-	else:
-		proc = invoke ('uname', [ '-r','-s'])
+        if 'OSTYPE' in os.environ:
+                OSTYPE = os.environ['OSTYPE'].split()[0]
+        else:
+                proc = invoke ('uname', [ '-r','-s'])
 
-		exitCode = proc.returncode
-		stdout = proc.stdout.readlines()
-		stderr = proc.stderr.readlines()
+                exitCode = proc.returncode
+                stdout = proc.stdout.readlines()
+                stderr = proc.stderr.readlines()
 
-		proc.wait()
+                proc.wait()
 
-		if exitCode:
-			bailout ('Failed to run uname: %s' % str(stderr))
+                if exitCode:
+                        bailout ('Failed to run uname: %s' % str(stderr))
 
-		line = stdout[0].strip()
+                line = stdout[0].strip()
 
-		if line.startswith('SunOS'):
-			if line.endswith ('5.8'):
-				OSTYPE = 'Solaris 8'
-			elif line.endswith ('5.10'):
-				OSTYPE = 'Solaris 10'
-			else:
-				bailout ('Cannot run on %s' % line)
-		elif line.startswith('Linux'):
-			OSTYPE = 'Linux'
-		else:
-			bailout ('Cannot run on %s' % line)
+                if line.startswith('SunOS'):
+                        if line.endswith ('5.8'):
+                                OSTYPE = 'Solaris 8'
+                        elif line.endswith ('5.10'):
+                                OSTYPE = 'Solaris 10'
+                        else:
+                                bailout ('Cannot run on %s' % line)
+                elif line.startswith('Linux'):
+                        OSTYPE = 'Linux'
+                else:
+                        bailout ('Cannot run on %s' % line)
 
-	OSTYPE = OSTYPE.lower()
+        OSTYPE = OSTYPE.lower()
 
-	if OSTYPE == 'linux':
-		TESTER = LinuxTest()
-	elif OSTYPE == 'solaris 8':
-		TESTER = Solaris8Test()
-	elif OSTYPE == 'solaris 10':
-		TESTER = Solaris10Test()
-	else:
-		bailout ('Unknown OSTYPE: %s' % OSTYPE)
-	return
+        if OSTYPE == 'linux':
+                TESTER = LinuxTest()
+        elif OSTYPE == 'solaris 8':
+                TESTER = Solaris8Test()
+        elif OSTYPE == 'solaris 10':
+                TESTER = Solaris10Test()
+        else:
+                bailout ('Unknown OSTYPE: %s' % OSTYPE)
+        return
 
 def processCommandLine():
-	global DELAY, DURATION
+        global DELAY, DURATION
 
-	try:
-		options, args = getopt.getopt (sys.argv[1:], 's:d:')
-	except:
-		bailout ('Invalid command-line', True)
+        try:
+                options, args = getopt.getopt (sys.argv[1:], 's:d:')
+        except:
+                bailout ('Invalid command-line', True)
 
-	if len(args):
-		bailout ('Too many command-line arguments', True)
+        if len(args):
+                bailout ('Too many command-line arguments', True)
 
-	for (option, value) in options:
-		if option == '-s':
-			try:
-				DELAY = int(value)
-			except:
-				bailout ('Value for -s must be an integer')
+        for (option, value) in options:
+                if option == '-s':
+                        try:
+                                DELAY = int(value)
+                        except:
+                                bailout ('Value for -s must be an integer')
 
-			if not (1 <= DELAY <= 600):
-				bailout ('Invalid value for -s')
-			
-		elif option == '-d':
-			try:
-				DURATION = int(value)
-			except:
-				bailout ('Value for -d must be an integer')
+                        if not (1 <= DELAY <= 600):
+                                bailout ('Invalid value for -s')
+                        
+                elif option == '-d':
+                        try:
+                                DURATION = int(value)
+                        except:
+                                bailout ('Value for -d must be an integer')
 
-			if not (1 <= DURATION <= 3600):
-				bailout ('Invalid value for -d')
-	return
+                        if not (1 <= DURATION <= 3600):
+                                bailout ('Invalid value for -d')
+        return
 
 pctRE = re.compile ('([0-9]+\.[0-9])%')
 def percent (s):
-	global pctRE
+        global pctRE
 
-	match = pctRE.search(s)
-	if match:
-		return match.group(1)
-	return ''
+        match = pctRE.search(s)
+        if match:
+                return match.group(1)
+        return ''
 
 memRE = re.compile ('([0-9]+)([a-z])')
 def asMb (s):
-	global memRE
+        global memRE
 
-	s = s.lower()
-	match = memRE.search(s)
-	if match:
-		num = int(match.group(1))
-		suffix = match.group(2)
+        s = s.lower()
+        match = memRE.search(s)
+        if match:
+                num = int(match.group(1))
+                suffix = match.group(2)
 
-		if suffix == 'k':
-			num = num * 1000
-		elif suffix == 'm':
-			num = num * 1000000
-		elif suffix == 'g':
-			num = num * 1000000000
+                if suffix == 'k':
+                        num = num * 1000
+                elif suffix == 'm':
+                        num = num * 1000000
+                elif suffix == 'g':
+                        num = num * 1000000000
 
-		return '%0.1f' % (num / 1000000.0)
+                return '%0.1f' % (num / 1000000.0)
 
-	return ''
+        return ''
 
 class Test:
-	def __init__ (self):
-		self.topCommand = 'top'
-		self.topArguments = []
-		self.headings = []
-		self.extraCommand = None
-		self.extraArguments = []
-		return
+        def __init__ (self):
+                self.topCommand = 'top'
+                self.topArguments = []
+                self.headings = []
+                self.extraCommand = None
+                self.extraArguments = []
+                return
 
-	def getHeadings (self):
-		return self.headings
+        def getHeadings (self):
+                return self.headings
 
-	def getCommand (self):
-		return self.topCommand
+        def getCommand (self):
+                return self.topCommand
 
-	def getArgs (self):
-		return self.topArguments
+        def getArgs (self):
+                return self.topArguments
 
-	def getExtraCommand (self):
-		return self.extraCommand
+        def getExtraCommand (self):
+                return self.extraCommand
 
-	def getExtraArgs (self):
-		return self.extraArguments
+        def getExtraArgs (self):
+                return self.extraArguments
 
-	def parseResults (self, lines, extraLines = None):
-		return 
+        def parseResults (self, lines, extraLines = None):
+                return 
 
-	def printHeadings (self):
-		print '\t'.join (['start time'] + self.headings)
-		return
+        def printHeadings (self):
+                print('\t'.join (['start time'] + self.headings))
+                return
 
-	def printResults (self, startTime, lines, extraLines = None):
-		columns = self.parseResults(lines, extraLines)
-		columns.insert (0,
-			time.strftime('%Y-%m-%d %H:%M:%S',
-				time.localtime(startTime)))
-		print '\t'.join (columns)
-		return
+        def printResults (self, startTime, lines, extraLines = None):
+                columns = self.parseResults(lines, extraLines)
+                columns.insert (0,
+                        time.strftime('%Y-%m-%d %H:%M:%S',
+                                time.localtime(startTime)))
+                print('\t'.join (columns))
+                return
 
 class LinuxTest (Test):
-	def __init__ (self):
-		Test.__init__ (self)
-		self.topCommand = '/usr/bin/top'
-		self.topArguments = [ '-n', '2', '-b' ]
-		self.headings = [
-			'cpu idle %', 'cpu user %',
-			'cpu system %', 'cpu io wait %',
-			'RAM total (Mb)', 'RAM used (Mb)', 'RAM free (Mb)',
-			'swap total (Mb)', 'swap used (Mb)', 'swap free (Mb)',
-			'1-min load avg', '5-min load avg', '15-min load avg',
-			'running tasks', 'sleeping tasks',
-			]
-		self.extraCommand = 'free'
-		self.extraArguments = [ '-m' ]
-		return
+        def __init__ (self):
+                Test.__init__ (self)
+                self.topCommand = '/usr/bin/top'
+                self.topArguments = [ '-n', '2', '-b' ]
+                self.headings = [
+                        'cpu idle %', 'cpu user %',
+                        'cpu system %', 'cpu io wait %',
+                        'RAM total (Mb)', 'RAM used (Mb)', 'RAM free (Mb)',
+                        'swap total (Mb)', 'swap used (Mb)', 'swap free (Mb)',
+                        '1-min load avg', '5-min load avg', '15-min load avg',
+                        'running tasks', 'sleeping tasks',
+                        ]
+                self.extraCommand = 'free'
+                self.extraArguments = [ '-m' ]
+                return
 
-	def parseResults (self, lines, extraLines = None):
+        def parseResults (self, lines, extraLines = None):
 
-		cpu = None		# pulled from 'top'
-		swap = None
-		load = None
-		tasks = None
+                cpu = None              # pulled from 'top'
+                swap = None
+                load = None
+                tasks = None
 
-		mem = None		# pulled from 'free -m'
-		cache = None
-		swap = None
+                mem = None              # pulled from 'free -m'
+                cache = None
+                swap = None
 
-		if extraLines:
-			for line in extraLines:
-				if line.startswith('Mem:'):
-					mem = line.split()
-				elif line.startswith('-/+'):
-					cache = line.split()
-				elif line.startswith('Swap:'):
-					swap = line.split()
+                if extraLines:
+                        for line in extraLines:
+                                if line.startswith('Mem:'):
+                                        mem = line.split()
+                                elif line.startswith('-/+'):
+                                        cache = line.split()
+                                elif line.startswith('Swap:'):
+                                        swap = line.split()
 
-		for line in lines:
-			if line.startswith('Cpu(s):'):
-				cpu = line.split()
-			elif line.startswith('Tasks:'):
-				tasks = line.split()
-			elif line.startswith('top - '):
-				load = line.replace(',', '').split()
+                for line in lines:
+                        if line.startswith('Cpu(s):'):
+                                cpu = line.split()
+                        elif line.startswith('Tasks:'):
+                                tasks = line.split()
+                        elif line.startswith('top - '):
+                                load = line.replace(',', '').split()
 
-		columns = []
+                columns = []
 
-		if cpu:
-			columns.append (percent (cpu[4]))
-			columns.append (percent (cpu[1]))
-			columns.append (percent (cpu[2]))
-			columns.append (percent (cpu[5]))
-		else:
-			columns = columns + [''] * 4
+                if cpu:
+                        columns.append (percent (cpu[4]))
+                        columns.append (percent (cpu[1]))
+                        columns.append (percent (cpu[2]))
+                        columns.append (percent (cpu[5]))
+                else:
+                        columns = columns + [''] * 4
 
-		if mem:
-			columns.append (mem[1])
-		else:
-			columns = columns + [''] 
+                if mem:
+                        columns.append (mem[1])
+                else:
+                        columns = columns + [''] 
 
-		if cache:
-			columns.append (cache[2])
-			columns.append (cache[3])
-		else:
-			columns = columns + [''] * 2
+                if cache:
+                        columns.append (cache[2])
+                        columns.append (cache[3])
+                else:
+                        columns = columns + [''] * 2
 
-		if swap:
-			columns.append (swap[1])
-			columns.append (swap[2])
-			columns.append (swap[3])
-		else:
-			columns = columns + [''] * 3
+                if swap:
+                        columns.append (swap[1])
+                        columns.append (swap[2])
+                        columns.append (swap[3])
+                else:
+                        columns = columns + [''] * 3
 
-		if load:
-			columns.append (load[-3])
-			columns.append (load[-2])
-			columns.append (load[-1])
-		else:
-			columns = columns + [''] * 3
+                if load:
+                        columns.append (load[-3])
+                        columns.append (load[-2])
+                        columns.append (load[-1])
+                else:
+                        columns = columns + [''] * 3
 
 
-		if tasks:
-			columns.append (tasks[3])
-			columns.append (tasks[5])
-		else:
-			columns = columns + [''] * 2
+                if tasks:
+                        columns.append (tasks[3])
+                        columns.append (tasks[5])
+                else:
+                        columns = columns + [''] * 2
 
-		return columns
+                return columns
 
 class Solaris10Test (Test):
-	def __init__ (self):
-		Test.__init__ (self)
-		self.topCommand = '/opt/sfw/bin/top'
-		self.topArguments = [ '-d', '2' ]
-		self.headings = [
-			'cpu idle %', 'cpu user %',
-			'cpu kernel %', 'cpu io wait %', 'cpu swap %',
-			'RAM total (Mb)', 'RAM free (Mb)',
-			'swap used (Mb)', 'swap free (Mb)',
-			'1-min load avg', '5-min load avg', '15-min load avg',
-			'all processes', 'sleeping processes',
-			'zombie processes', 'running processes'
-			]
-		return
+        def __init__ (self):
+                Test.__init__ (self)
+                self.topCommand = '/opt/sfw/bin/top'
+                self.topArguments = [ '-d', '2' ]
+                self.headings = [
+                        'cpu idle %', 'cpu user %',
+                        'cpu kernel %', 'cpu io wait %', 'cpu swap %',
+                        'RAM total (Mb)', 'RAM free (Mb)',
+                        'swap used (Mb)', 'swap free (Mb)',
+                        '1-min load avg', '5-min load avg', '15-min load avg',
+                        'all processes', 'sleeping processes',
+                        'zombie processes', 'running processes'
+                        ]
+                return
 
-	def parseResults (self, lines, extraLines = None):
-		cpu = None
-		mem = None
-		load = None
-		tasks = None
+        def parseResults (self, lines, extraLines = None):
+                cpu = None
+                mem = None
+                load = None
+                tasks = None
 
-		for line in lines:
-			if line.startswith('CPU states:'):
-				cpu = line.split()
-			elif line.startswith('Memory:'):
-				mem = line.replace('swap in use', 'swap-in-use').split()
-			elif line.find(' processes:') >= 0:
-				tasks = line.replace(':','').replace(',','').split()
-			elif line.startswith('load averages:'):
-				load = line.replace(',', '').split()
+                for line in lines:
+                        if line.startswith('CPU states:'):
+                                cpu = line.split()
+                        elif line.startswith('Memory:'):
+                                mem = line.replace('swap in use', 'swap-in-use').split()
+                        elif line.find(' processes:') >= 0:
+                                tasks = line.replace(':','').replace(',','').split()
+                        elif line.startswith('load averages:'):
+                                load = line.replace(',', '').split()
 
-		columns = []
+                columns = []
 
-		if cpu:
-			columns.append (percent (cpu[2]))
-			columns.append (percent (cpu[4]))
-			columns.append (percent (cpu[6]))
-			columns.append (percent (cpu[8]))
-			columns.append (percent (cpu[10]))
-		else:
-			columns = columns + [''] * 5
+                if cpu:
+                        columns.append (percent (cpu[2]))
+                        columns.append (percent (cpu[4]))
+                        columns.append (percent (cpu[6]))
+                        columns.append (percent (cpu[8]))
+                        columns.append (percent (cpu[10]))
+                else:
+                        columns = columns + [''] * 5
 
-		if mem:
-			columns.append (asMb (mem[1]))
-			columns.append (asMb (mem[3]))
-			columns.append (asMb (mem[5]))
-			columns.append (asMb (mem[7]))
-		else:
-			columns = columns + [''] * 4
+                if mem:
+                        columns.append (asMb (mem[1]))
+                        columns.append (asMb (mem[3]))
+                        columns.append (asMb (mem[5]))
+                        columns.append (asMb (mem[7]))
+                else:
+                        columns = columns + [''] * 4
 
-		if load:
-			columns.append (load[2])
-			columns.append (load[3])
-			columns.append (load[4])
-		else:
-			columns = columns + [''] * 3
+                if load:
+                        columns.append (load[2])
+                        columns.append (load[3])
+                        columns.append (load[4])
+                else:
+                        columns = columns + [''] * 3
 
 
-		if tasks:
-			columns.append (tasks[0])
+                if tasks:
+                        columns.append (tasks[0])
 
-			for tag in [ 'sleeping', 'zombie', 'on' ]:
-				if tag in tasks:
-					columns.append(tasks[tasks.index(tag) - 1])
-				else:
-					columns.append('0')
-		else:
-			columns = columns + [''] * 4
+                        for tag in [ 'sleeping', 'zombie', 'on' ]:
+                                if tag in tasks:
+                                        columns.append(tasks[tasks.index(tag) - 1])
+                                else:
+                                        columns.append('0')
+                else:
+                        columns = columns + [''] * 4
 
-		return columns
+                return columns
 
-Solaris8Test = Solaris10Test		# alias for now, until diverges
+Solaris8Test = Solaris10Test            # alias for now, until diverges
 
 def handleFinishedProcesses (processes):
-	# to have ordered output, processes must be done from leftmost to
-	# rightmost (earliest to latest) in 'processes'.  if a later one
-	# ends before an earlier one, just ignore it until the earlier ones
-	# are done.
+        # to have ordered output, processes must be done from leftmost to
+        # rightmost (earliest to latest) in 'processes'.  if a later one
+        # ends before an earlier one, just ignore it until the earlier ones
+        # are done.
 
-	# if no processes, nothing to do here, just return empty list
-	if not processes:
-		return processes
+        # if no processes, nothing to do here, just return empty list
+        if not processes:
+                return processes
 
-	# work on the first process, then recurse for any others
+        # work on the first process, then recurse for any others
 
-	(startTime, proc, proc2) = processes[0]
+        (startTime, proc, proc2) = processes[0]
 
-	# if poll() returns None, then the process isn't finished.
-	# both proc and proc2 must have finished
-	if (proc.poll() == None):
-		return processes
+        # if poll() returns None, then the process isn't finished.
+        # both proc and proc2 must have finished
+        if (proc.poll() == None):
+                return processes
 
-	if proc2 != None:
-		if proc2.poll() == None:
-			return processes
+        if proc2 != None:
+                if proc2.poll() == None:
+                        return processes
 
-		exitCode2 = proc2.returncode
-		stdout2 = proc2.stdout.readlines()
-		stderr2 = proc2.stderr.readlines()
+                exitCode2 = proc2.returncode
+                stdout2 = proc2.stdout.readlines()
+                stderr2 = proc2.stderr.readlines()
 
-		proc2.wait()
+                proc2.wait()
 
-		if exitCode2:
-			bailout ('Subprocess failed: %s' % str(stderr))
-	else:
-		stdout2 = [] 
+                if exitCode2:
+                        bailout ('Subprocess failed: %s' % str(stderr))
+        else:
+                stdout2 = [] 
 
-	exitCode = proc.returncode
-	stdout = proc.stdout.readlines()
-	stderr = proc.stderr.readlines()
+        exitCode = proc.returncode
+        stdout = proc.stdout.readlines()
+        stderr = proc.stderr.readlines()
 
-	proc.wait()
+        proc.wait()
 
-	if exitCode:
-		bailout ('Subprocess failed: %s' % str(stderr))
+        if exitCode:
+                bailout ('Subprocess failed: %s' % str(stderr))
 
-	TESTER.printResults (startTime, stdout, stdout2)
+        TESTER.printResults (startTime, stdout, stdout2)
 
-	# recurse over any other processes
-	return handleFinishedProcesses (processes[1:])
+        # recurse over any other processes
+        return handleFinishedProcesses (processes[1:])
 
 def main():
-	determineOSType()
-	processCommandLine()
+        determineOSType()
+        processCommandLine()
 
-	TESTER.printHeadings()
+        TESTER.printHeadings()
 
-	top = TESTER.getCommand()
-	args = TESTER.getArgs()
+        top = TESTER.getCommand()
+        args = TESTER.getArgs()
 
-	now = time.time()
-	nextTime = now + DELAY
-	endTime = now + DURATION * 60.0
+        now = time.time()
+        nextTime = now + DELAY
+        endTime = now + DURATION * 60.0
 
-	extraCmd = TESTER.getExtraCommand()
-	extraArgs = TESTER.getExtraArgs()
+        extraCmd = TESTER.getExtraCommand()
+        extraArgs = TESTER.getExtraArgs()
 
 
-	if extraCmd:
-		proc2 = invoke(extraCmd, extraArgs)
-	else:
-		proc2 = None
+        if extraCmd:
+                proc2 = invoke(extraCmd, extraArgs)
+        else:
+                proc2 = None
 
-	processes = [ (now, invoke(top, args), proc2) ]
+        processes = [ (now, invoke(top, args), proc2) ]
 
-	while (now < endTime) or (len(processes) > 0):
-		now = time.time()
+        while (now < endTime) or (len(processes) > 0):
+                now = time.time()
 
-		# if we're past the end time, we're waiting for procs to end
-		if (now > endTime):
-			processes = handleFinishedProcesses(processes)
-			time.sleep (0.5)
-		else:
-			# otherwise, there's more work to do
+                # if we're past the end time, we're waiting for procs to end
+                if (now > endTime):
+                        processes = handleFinishedProcesses(processes)
+                        time.sleep (0.5)
+                else:
+                        # otherwise, there's more work to do
 
-			# if we have spare time, handle any ended procs
-			if (nextTime - now) >= TIME_WINDOW:
-				processes = handleFinishedProcesses(processes)
+                        # if we have spare time, handle any ended procs
+                        if (nextTime - now) >= TIME_WINDOW:
+                                processes = handleFinishedProcesses(processes)
 
-			# if we're close to the next process starting, just
-			# sit and wait to start it
+                        # if we're close to the next process starting, just
+                        # sit and wait to start it
 
-			now = time.time()
+                        now = time.time()
 
-			if (nextTime - now) <= TIME_WINDOW:
-				if nextTime - now > 0.0:
-					time.sleep(nextTime - now)
-				proc = invoke (top, args)
+                        if (nextTime - now) <= TIME_WINDOW:
+                                if nextTime - now > 0.0:
+                                        time.sleep(nextTime - now)
+                                proc = invoke (top, args)
 
-				if extraCmd:
-					proc2 = invoke(extraCmd, extraArgs)
-				else:
-					proc2 = None
+                                if extraCmd:
+                                        proc2 = invoke(extraCmd, extraArgs)
+                                else:
+                                        proc2 = None
 
-				processes.append ( (nextTime, proc, proc2) )
+                                processes.append ( (nextTime, proc, proc2) )
 
-				nextTime = nextTime + DELAY
-			else:
-				# next process isn't close to starting, so
-				# just wait a while and check again
+                                nextTime = nextTime + DELAY
+                        else:
+                                # next process isn't close to starting, so
+                                # just wait a while and check again
 
-				time.sleep (TIME_WINDOW)
+                                time.sleep (TIME_WINDOW)
 
-		now = time.time()
-	return
+                now = time.time()
+        return
 
 if __name__ == '__main__':
-	main()
+        main()

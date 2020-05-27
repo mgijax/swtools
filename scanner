@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import sys
 import regex
@@ -13,29 +13,29 @@ FUNCT = 1
 OTHER = 2
 
 def process (fp):
-	mode = OTHER
-	line = fp.readline()
-	while line:
-		if mode == OTHER:
-			if class_cre.match (line) != -1:
-				if class_cre.group (1)[-1] != ':':
-					mode = CLASS
-				else:
-					print string.rstrip (line)
-			elif function_cre.match (line) != -1:
-				mode = FUNCT
-		if mode != OTHER:
-			print string.rstrip(line)
-			if closing_cre.search (line) != -1:
-				mode = OTHER
-		line = fp.readline()
-	return
+        mode = OTHER
+        line = fp.readline()
+        while line:
+                if mode == OTHER:
+                        if class_cre.match (line) != -1:
+                                if class_cre.group (1)[-1] != ':':
+                                        mode = CLASS
+                                else:
+                                        print(string.rstrip (line))
+                        elif function_cre.match (line) != -1:
+                                mode = FUNCT
+                if mode != OTHER:
+                        print(string.rstrip(line))
+                        if closing_cre.search (line) != -1:
+                                mode = OTHER
+                line = fp.readline()
+        return
 
 if __name__ == '__main__':
-	for filename in sys.argv[1:]:
-		print filename
-		print '-' * len(filename)
-		fp = open (filename, 'r')
-		process (fp)
-		fp.close ()
-		print
+        for filename in sys.argv[1:]:
+                print(filename)
+                print('-' * len(filename))
+                fp = open (filename, 'r')
+                process (fp)
+                fp.close ()
+                print()

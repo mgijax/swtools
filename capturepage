@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!./python
 
 import httpReader
 import string
@@ -8,40 +8,40 @@ import time
 USAGE = 'Usage: %s <url to capture> <time delay in seconds>\n\n' % sys.argv[0]
 
 def main (url, delay):
-	try:
-		while 1:
-			captureOne (url)
-			time.sleep(delay)
-	except:
-		pass		# die quietly when someone does Ctrl-C
-	return
+        try:
+                while 1:
+                        captureOne (url)
+                        time.sleep(delay)
+        except:
+                pass            # die quietly when someone does Ctrl-C
+        return
 
 def captureOne (url):
-	lines, errors = httpReader.getURL (url)
-	if errors:
-		print "Failed to get URL.  Terminating.  Errors include:"
-		for error in errors:
-			print "    %s" % error
-		sys.exit(1)
+        lines, errors = httpReader.getURL (url)
+        if errors:
+                print("Failed to get URL.  Terminating.  Errors include:")
+                for error in errors:
+                        print("    %s" % error)
+                sys.exit(1)
 
-	lines = map (string.strip, lines)	# skip header
-	if '' in lines:
-		pos = lines.index('')
-		lines = lines[pos+1:]
+        lines = list(map (string.strip, lines))       # skip header
+        if '' in lines:
+                pos = lines.index('')
+                lines = lines[pos+1:]
 
-	for line in lines:			# output to stdout
-		print line
-	return
+        for line in lines:                      # output to stdout
+                print(line)
+        return
 
 if __name__ == '__main__':
-	if len(sys.argv) != 3:
-		print "Incorrect number of parameters"
-		print USAGE
-		sys.exit(1)
+        if len(sys.argv) != 3:
+                print("Incorrect number of parameters")
+                print(USAGE)
+                sys.exit(1)
 
-	try:
-		main(sys.argv[1], string.atoi(sys.argv[2]))
-	except:
-		print "Second parameter should be an integer"
-		print USAGE
-		sys.exit(1)
+        try:
+                main(sys.argv[1], string.atoi(sys.argv[2]))
+        except:
+                print("Second parameter should be an integer")
+                print(USAGE)
+                sys.exit(1)
